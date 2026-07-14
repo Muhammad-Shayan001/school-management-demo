@@ -17,6 +17,7 @@ import {
   Printer
 } from 'lucide-react';
 import { DatabaseSchema, Student, Staff, Family } from '../types';
+import { addToast } from './Toast';
 
 interface AdditionalViewProps {
   db: DatabaseSchema;
@@ -334,7 +335,7 @@ export default function AdditionalView({ db, schoolBranding }: AdditionalViewPro
                   placeholder="Dear Parents, reminder that school will remain closed tomorrow..."
                 />
               </div>
-              <button type="button" onClick={() => alert('Broadcast simulated! WhatsApp API not configured.')} className="w-full py-3 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1DA851] flex items-center justify-center gap-2">
+              <button type="button" onClick={() => addToast('info', 'Broadcast simulated! WhatsApp API not configured.')} className="w-full py-3 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1DA851] flex items-center justify-center gap-2">
                 <MessageSquare className="h-4 w-4" /> Send via WhatsApp
               </button>
             </form>

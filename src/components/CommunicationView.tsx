@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { MessageSquare, Send, Users, History, AlertCircle } from 'lucide-react';
+import { addToast } from './Toast';
 
 export default function CommunicationView() {
   const [currentSubTab, setCurrentSubTab] = useState('Announcements');
@@ -75,7 +76,7 @@ export default function CommunicationView() {
                   Show on Parent Portal
                 </label>
               </div>
-              <button type="button" onClick={() => alert('Message queued for sending.')} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center justify-center gap-2">
+              <button type="button" onClick={() => addToast('success', 'Message queued for sending.')} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center justify-center gap-2">
                 <Send className="h-4 w-4" /> Broadcast Announcement
               </button>
             </form>
