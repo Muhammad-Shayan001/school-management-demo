@@ -1,0 +1,6 @@
+{
+  "name": "Rana School Management System",
+  "description": "A comprehensive multi-module school management system for student registration, attendance, fee collection, reporting, and operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
