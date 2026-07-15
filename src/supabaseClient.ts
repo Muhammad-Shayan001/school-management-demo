@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { DatabaseSchema } from './types.js';
+import { DatabaseSchema } from './types';
 
 export interface SupabaseConfig {
   url: string;

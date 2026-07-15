@@ -24,7 +24,7 @@ import {
   Exam,
   ExamAssignment,
   ExamResult,
-} from './types.js';
+} from './types';
 
 // ---------------------------------------------------------------------------
 // Pure in-memory database store.  No native modules, no file-system writes.

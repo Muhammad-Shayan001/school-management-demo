@@ -14,7 +14,7 @@ import {
   fillDummyData,
   clearAllData,
   postToLedger
-} from './src/dbStore.js';
+} from './src/dbStore';
 import {
   School,
   AdminUser,
@@ -40,7 +40,7 @@ import {
   InventoryItem,
   ExamResult,
   Session
-} from './src/types.js';
+} from './src/types';
 
 // Standard environment setup
 const PORT = 3000;
