@@ -508,8 +508,16 @@ export default function App() {
             <AdditionalView db={db} schoolBranding={schoolBranding} />
           )}
 
+          {(currentPage === 'Communication') && (
+            <CommunicationView />
+          )}
+
+          {(currentPage === 'Backup / Import' || currentPage === 'Old Data') && (
+            <MetaPages page={currentPage} db={db} onRefresh={refreshDatabase} />
+          )}
+
           {/* Work in progress pages */}
-          {['Communication', 'Birthdays', 'Request a Feature', 'Our Services', 'Developer Info', 'Bulk Operations', 'Backup / Import', 'Old Data'].includes(currentPage) && (
+          {['Birthdays', 'Request a Feature', 'Our Services', 'Developer Info', 'Bulk Operations'].includes(currentPage) && (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
               <div className="p-4 bg-gray-50 rounded-full">
                 <LayoutDashboard className="h-8 w-8 text-gray-300" />
