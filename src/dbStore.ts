@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { createRequire } from 'module';
 import {
   DatabaseSchema,
   School,
@@ -27,15 +26,17 @@ import {
   Exam,
   ExamAssignment,
   ExamResult,
-} from './types';
-
-const require = createRequire(import.meta.url);
 let Database: any = null;
 if (!process.env.VERCEL) {
   try {
-    Database = require('better-sqlite3');
+    // Use dynamic import instead of require/createRequire to avoid CJS/ESM mixed syntax errors in Vercel bundler
+    import('better-sqlite3').then((m) => {
+      Database = m.default || m;
+    }).catch(() => {
+      console.warn('better-sqlite3 not available');
+    });
   } catch (e) {
-    console.warn('better-sqlite3 not available, falling back to in-memory mode');
+    console.warn('better-sqlite3 not available');
   }
 }
 
