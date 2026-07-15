@@ -14,7 +14,7 @@ import {
   fillDummyData,
   clearAllData,
   postToLedger
-} from './src/dbStore';
+} from './src/dbStore.js';
 import {
   School,
   AdminUser,
@@ -40,7 +40,7 @@ import {
   InventoryItem,
   ExamResult,
   Session
-} from './src/types';
+} from './src/types.js';
 
 // Standard environment setup
 const PORT = 3000;
@@ -1298,7 +1298,12 @@ app.delete('/api/inventory/:id', (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const { createRequire } = await import('node:module');
-    const _require = createRequire(import.meta.url);
+    const metaUrl = typeof import.meta !== 'undefined' && import.meta.url ? import.meta.url : (typeof __filename !== 'undefined' ? __filename : '');
+    if (!metaUrl) {
+      console.warn('Could not determine current file path for dev server initialization');
+      return;
+    }
+    const _require = createRequire(metaUrl);
     const vitePkg = 'vite';
     const { createServer: createViteServer } = _require(vitePkg);
     const vite = await createViteServer({
