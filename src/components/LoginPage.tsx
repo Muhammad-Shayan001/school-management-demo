@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { School, Database, Lock, User, ArrowRight, ShieldCheck, Sparkles, ChevronRight } from 'lucide-react';
 
 interface LoginPageProps {
-  onLogin: (email: string, pass: string) => boolean;
+  onLogin: (email: string, pass: string) => boolean | Promise<boolean>;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {

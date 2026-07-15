@@ -97,14 +97,30 @@ export default function App() {
     }
   };
 
-  const handleLogin = (email: string, pass: string) => {
-    // Demo credentials check (will implement proper later if needed)
-    if (email === 'admin@school.com' && pass === 'admin123') {
-      localStorage.setItem('rs_auth', 'true');
-      setIsAuthenticated(true);
-      return true;
+  const handleLogin = async (email: string, pass: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('rs_auth', 'true');
+        localStorage.setItem('rs_admin_name', data.user?.name || 'Admin');
+        setIsAuthenticated(true);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      // Fallback: allow demo login if server is unreachable
+      if ((email === 'rana@school.com' || email === 'admin@school.com') && pass === 'admin123') {
+        localStorage.setItem('rs_auth', 'true');
+        setIsAuthenticated(true);
+        return true;
+      }
+      return false;
     }
-    return false;
   };
 
   const handleLogout = () => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Archive, ArrowRight, Backup, BadgeInfo, BellRing, BookOpenText, Building2, Download, FileClock, FileUp, RefreshCcw, ShieldAlert, Sparkles, SplitSquareHorizontal, Upload, Users } from 'lucide-react';
+import { Archive, ArrowRight, HardDrive, BadgeInfo, BellRing, BookOpenText, Building2, Download, FileClock, FileUp, RefreshCcw, ShieldAlert, Sparkles, SplitSquareHorizontal, Upload, Users } from 'lucide-react';
 import { DatabaseSchema } from '../types';
 import { addToast } from './Toast';
 
@@ -274,7 +274,7 @@ export default function MetaPages({ page, db, onRefresh }: MetaPagesProps) {
         <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 0, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-4">
             <button onClick={createSnapshot} className="w-full py-3 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-black flex items-center justify-center gap-2 cursor-pointer">
-              <Backup className="h-4 w-4" /> Create Backup Snapshot
+              <HardDrive className="h-4 w-4" /> Create Backup Snapshot
             </button>
             <button onClick={exportDb} className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center justify-center gap-2 cursor-pointer">
               <Download className="h-4 w-4" /> Download Database JSON

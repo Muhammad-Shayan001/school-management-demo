@@ -14,7 +14,8 @@ import {
   Search,
   Filter,
   CheckCircle2,
-  Printer
+  Printer,
+  ArrowUpRight
 } from 'lucide-react';
 import { DatabaseSchema, Student, Staff, Family } from '../types';
 import { addToast } from './Toast';
