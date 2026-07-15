@@ -1,6 +1,6 @@
-import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createRequire } from 'module';
 import {
   DatabaseSchema,
   School,
@@ -29,20 +29,33 @@ import {
   ExamResult,
 } from './types';
 
+const require = createRequire(import.meta.url);
+let Database: any = null;
+if (!process.env.VERCEL) {
+  try {
+    Database = require('better-sqlite3');
+  } catch (e) {
+    console.warn('better-sqlite3 not available, falling back to in-memory mode');
+  }
+}
+
 const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'school_backend.sqlite');
 const SCHEMA_FILE = process.env.VERCEL ? path.join(process.cwd(), 'sql', 'schema.postgres.sql') : path.join(process.cwd(), 'sql', 'schema.postgres.sql');
 
-let sqliteDb: Database.Database | null = null;
+let sqliteDb: any = null;
 let schemaInitialized = false;
+let inMemoryDb: DatabaseSchema | null = null;
 
 function ensureDataDir(): void {
+  if (process.env.VERCEL) return;
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 }
 
-function getDb(): Database.Database {
+function getDb(): any {
+  if (process.env.VERCEL || !Database) return null;
   ensureDataDir();
   if (!sqliteDb) {
     sqliteDb = new Database(DB_FILE);
@@ -53,8 +66,8 @@ function getDb(): Database.Database {
   return sqliteDb;
 }
 
-function initializeSchema(db: Database.Database): void {
-  if (schemaInitialized) return;
+function initializeSchema(db: any): void {
+  if (schemaInitialized || !db) return;
 
   if (fs.existsSync(SCHEMA_FILE)) {
     const schemaSql = fs.readFileSync(SCHEMA_FILE, 'utf-8');
@@ -308,7 +321,10 @@ function initializeSchema(db: Database.Database): void {
   schemaInitialized = true;
 }
 
-function dbHasSeedData(db: Database.Database): boolean {
+function dbHasSeedData(db: any): boolean {
+  if (process.env.VERCEL || !Database) {
+    return Boolean(inMemoryDb && inMemoryDb.schools && inMemoryDb.schools.length > 0);
+  }
   const row = db.prepare('SELECT COUNT(*) AS count FROM schools').get() as { count: number } | undefined;
   return Boolean(row && row.count > 0);
 }
@@ -378,6 +394,10 @@ function insertMany<T extends Record<string, any>>(db: Database.Database, table:
 }
 
 function persistDatabase(dbState: DatabaseSchema): void {
+  if (process.env.VERCEL || !Database) {
+    inMemoryDb = JSON.parse(JSON.stringify(dbState));
+    return;
+  }
   const db = getDb();
   deleteAllData(db);
 
@@ -411,6 +431,12 @@ function persistDatabase(dbState: DatabaseSchema): void {
 }
 
 function loadDatabase(): DatabaseSchema {
+  if (process.env.VERCEL || !Database) {
+    if (!inMemoryDb) {
+      return getEmptyDatabase();
+    }
+    return JSON.parse(JSON.stringify(inMemoryDb));
+  }
   const db = getDb();
 
   const schools = selectAll<School>(db, 'schools');
