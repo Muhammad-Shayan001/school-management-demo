@@ -555,7 +555,6 @@ export function readDatabase(): DatabaseSchema {
 }
 
 export function writeDatabase(dbState: DatabaseSchema): void {
-  ensureDatabaseExists();
   persistDatabase(dbState);
 }
 

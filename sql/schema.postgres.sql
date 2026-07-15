@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS students (
   section_id TEXT NOT NULL REFERENCES sections(id) ON DELETE RESTRICT,
   admission_date DATE NOT NULL,
   billing_mode TEXT NOT NULL CHECK (billing_mode IN ('individual', 'family')),
-  family_id TEXT NOT NULL DEFAULT '' REFERENCES families(id) ON DELETE SET DEFAULT,
+  family_id TEXT NOT NULL DEFAULT '',
   manual_monthly_fee NUMERIC(12,2) NOT NULL DEFAULT 0,
   status TEXT NOT NULL CHECK (status IN ('active', 'inactive', 'left'))
 );
