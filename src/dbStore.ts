@@ -1,6 +1,6 @@
-import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createRequire } from 'node:module';
 import {
   DatabaseSchema,
   School,
@@ -29,12 +29,29 @@ import {
   ExamResult,
 } from './types';
 
+// ---------------------------------------------------------------------------
+// SQLite driver – loaded conditionally at runtime so Vercel's bundler never
+// tries to resolve/bundle the native C++ addon.
+// ---------------------------------------------------------------------------
 const IS_VERCEL = Boolean(process.env.VERCEL);
+
+let Database: any = null;
+if (!IS_VERCEL) {
+  try {
+    const _require = createRequire(import.meta.url);
+    // Variable indirection prevents Vercel's static analysis from tracing this
+    const sqlitePkg = 'better-sqlite3';
+    Database = _require(sqlitePkg);
+  } catch {
+    // Native module not available – will use in-memory fallback
+  }
+}
+
 const DATA_DIR = IS_VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'school_backend.sqlite');
 const SCHEMA_FILE = path.join(process.cwd(), 'sql', 'schema.postgres.sql');
 
-let sqliteDb: Database.Database | null = null;
+let sqliteDb: any = null;
 let schemaInitialized = false;
 let inMemoryDb: DatabaseSchema | null = null;
 
@@ -45,8 +62,8 @@ function ensureDataDir(): void {
   }
 }
 
-function getDb(): Database.Database {
-  if (IS_VERCEL) return null as any;
+function getDb(): any {
+  if (IS_VERCEL || !Database) return null;
   ensureDataDir();
   if (!sqliteDb) {
     sqliteDb = new Database(DB_FILE);
@@ -57,7 +74,7 @@ function getDb(): Database.Database {
   return sqliteDb;
 }
 
-function initializeSchema(db: Database.Database): void {
+function initializeSchema(db: any): void {
   if (schemaInitialized || !db) return;
 
   if (fs.existsSync(SCHEMA_FILE)) {
@@ -312,7 +329,7 @@ function initializeSchema(db: Database.Database): void {
   schemaInitialized = true;
 }
 
-function dbHasSeedData(db: Database.Database): boolean {
+function dbHasSeedData(db: any): boolean {
   if (IS_VERCEL) {
     return Boolean(inMemoryDb && inMemoryDb.schools && inMemoryDb.schools.length > 0);
   }
@@ -328,11 +345,11 @@ function mapRows<T>(rows: unknown[]): T[] {
   return rows as T[];
 }
 
-function selectAll<T>(db: Database.Database, table: string): T[] {
+function selectAll<T>(db: any, table: string): T[] {
   return mapRows<T>(db.prepare(`SELECT * FROM ${table}`).all());
 }
 
-function deleteAllData(db: Database.Database): void {
+function deleteAllData(db: any): void {
   const tables = [
     'exam_results',
     'inventory_items',
@@ -370,7 +387,7 @@ function deleteAllData(db: Database.Database): void {
   transaction();
 }
 
-function insertMany<T extends Record<string, any>>(db: Database.Database, table: string, rows: T[]): void {
+function insertMany<T extends Record<string, any>>(db: any, table: string, rows: T[]): void {
   if (rows.length === 0) return;
   const columns = Object.keys(rows[0]);
   const placeholders = columns.map((column) => `@${column}`).join(', ');
@@ -500,10 +517,17 @@ function loadDatabase(): DatabaseSchema {
 }
 
 export function ensureDatabaseExists(): void {
-  ensureDataDir();
-  getDb();
-  if (!dbHasSeedData(getDb())) {
-    fillDummyData();
+  const db = getDb();
+  if (db) {
+    // SQLite path (local development)
+    if (!dbHasSeedData(db)) {
+      fillDummyData();
+    }
+  } else {
+    // In-memory path (Vercel)
+    if (!dbHasSeedData(null as any)) {
+      fillDummyData();
+    }
   }
 }
 
