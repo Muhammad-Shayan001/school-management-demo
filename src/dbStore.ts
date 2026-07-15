@@ -29,9 +29,9 @@ import {
   ExamResult,
 } from './types';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'school_backend.sqlite');
-const SCHEMA_FILE = path.join(process.cwd(), 'sql', 'schema.postgres.sql');
+const SCHEMA_FILE = process.env.VERCEL ? path.join(process.cwd(), 'sql', 'schema.postgres.sql') : path.join(process.cwd(), 'sql', 'schema.postgres.sql');
 
 let sqliteDb: Database.Database | null = null;
 let schemaInitialized = false;
