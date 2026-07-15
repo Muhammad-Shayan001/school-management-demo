@@ -1296,8 +1296,11 @@ app.delete('/api/inventory/:id', (req, res) => {
 // VITE DEV / PROD SERVER BOOTSTRAPPING
 // -----------------------------------------------------------------------------
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    const { createRequire } = await import('node:module');
+    const _require = createRequire(import.meta.url);
+    const vitePkg = 'vite';
+    const { createServer: createViteServer } = _require(vitePkg);
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'
