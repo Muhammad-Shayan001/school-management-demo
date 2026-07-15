@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -26,37 +27,26 @@ import {
   Exam,
   ExamAssignment,
   ExamResult,
-let Database: any = null;
-if (!process.env.VERCEL) {
-  try {
-    // Use dynamic import instead of require/createRequire to avoid CJS/ESM mixed syntax errors in Vercel bundler
-    import('better-sqlite3').then((m) => {
-      Database = m.default || m;
-    }).catch(() => {
-      console.warn('better-sqlite3 not available');
-    });
-  } catch (e) {
-    console.warn('better-sqlite3 not available');
-  }
-}
+} from './types';
 
-const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const DATA_DIR = IS_VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'school_backend.sqlite');
-const SCHEMA_FILE = process.env.VERCEL ? path.join(process.cwd(), 'sql', 'schema.postgres.sql') : path.join(process.cwd(), 'sql', 'schema.postgres.sql');
+const SCHEMA_FILE = path.join(process.cwd(), 'sql', 'schema.postgres.sql');
 
-let sqliteDb: any = null;
+let sqliteDb: Database.Database | null = null;
 let schemaInitialized = false;
 let inMemoryDb: DatabaseSchema | null = null;
 
 function ensureDataDir(): void {
-  if (process.env.VERCEL) return;
+  if (IS_VERCEL) return;
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 }
 
-function getDb(): any {
-  if (process.env.VERCEL || !Database) return null;
+function getDb(): Database.Database {
+  if (IS_VERCEL) return null as any;
   ensureDataDir();
   if (!sqliteDb) {
     sqliteDb = new Database(DB_FILE);
@@ -67,7 +57,7 @@ function getDb(): any {
   return sqliteDb;
 }
 
-function initializeSchema(db: any): void {
+function initializeSchema(db: Database.Database): void {
   if (schemaInitialized || !db) return;
 
   if (fs.existsSync(SCHEMA_FILE)) {
@@ -322,8 +312,8 @@ function initializeSchema(db: any): void {
   schemaInitialized = true;
 }
 
-function dbHasSeedData(db: any): boolean {
-  if (process.env.VERCEL || !Database) {
+function dbHasSeedData(db: Database.Database): boolean {
+  if (IS_VERCEL) {
     return Boolean(inMemoryDb && inMemoryDb.schools && inMemoryDb.schools.length > 0);
   }
   const row = db.prepare('SELECT COUNT(*) AS count FROM schools').get() as { count: number } | undefined;
@@ -395,7 +385,7 @@ function insertMany<T extends Record<string, any>>(db: Database.Database, table:
 }
 
 function persistDatabase(dbState: DatabaseSchema): void {
-  if (process.env.VERCEL || !Database) {
+  if (IS_VERCEL) {
     inMemoryDb = JSON.parse(JSON.stringify(dbState));
     return;
   }
@@ -432,7 +422,7 @@ function persistDatabase(dbState: DatabaseSchema): void {
 }
 
 function loadDatabase(): DatabaseSchema {
-  if (process.env.VERCEL || !Database) {
+  if (IS_VERCEL) {
     if (!inMemoryDb) {
       return getEmptyDatabase();
     }
