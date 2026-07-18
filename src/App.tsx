@@ -344,20 +344,28 @@ export default function App() {
             );
           })}
 
-          <div className="pt-4 mt-4 border-t border-[#2A4184] space-y-0.5">
+          <div className="pt-4 mt-4 border-t border-[#2A4184] space-y-1">
+            <div className="px-3 pb-2 text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider">
+              System Tools
+            </div>
             {bottomNav.map(item => {
               const Icon = item.icon;
+              const isActive = currentPage === item.name;
               return (
                 <button
                   key={item.name}
                   onClick={item.action || (() => handlePageNavigate(item.name))}
-                  className={`w-full flex items-center gap-3 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
                     item.name === 'Erase All Data' 
-                      ? 'text-rose-400 hover:bg-rose-500/10' 
-                      : 'text-[#94A3B8] hover:text-white hover:bg-[#2A4184]'
+                      ? 'text-rose-400 hover:bg-rose-500/10 hover:text-rose-300' 
+                      : item.name === 'Logout'
+                      ? 'text-[#94A3B8] hover:bg-white/10 hover:text-white'
+                      : isActive 
+                        ? 'bg-[#2A4184] text-white shadow-sm'
+                        : 'text-[#94A3B8] hover:text-white hover:bg-[#2A4184]'
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <Icon className={`h-4 w-4 shrink-0 ${item.name === 'Erase All Data' ? 'text-rose-400' : ''}`} />
                   {item.name}
                 </button>
               );
@@ -587,6 +595,40 @@ export default function App() {
                   </div>
                 );
               })}
+              <div className="pt-4 mt-4 border-t border-[#2A4184] space-y-1">
+                <div className="px-3 pb-2 text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider">
+                  System Tools
+                </div>
+                {bottomNav.map(item => {
+                  const Icon = item.icon;
+                  const isActive = currentPage === item.name;
+                  return (
+                    <button
+                      key={item.name}
+                      onClick={() => {
+                        if (item.action) {
+                          item.action();
+                        } else {
+                          handlePageNavigate(item.name);
+                        }
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
+                        item.name === 'Erase All Data' 
+                          ? 'text-rose-400 hover:bg-rose-500/10 hover:text-rose-300' 
+                          : item.name === 'Logout'
+                          ? 'text-[#94A3B8] hover:bg-white/10 hover:text-white'
+                          : isActive 
+                            ? 'bg-[#2A4184] text-white shadow-sm'
+                            : 'text-[#94A3B8] hover:text-white hover:bg-[#2A4184]'
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 shrink-0 ${item.name === 'Erase All Data' ? 'text-rose-400' : ''}`} />
+                      {item.name}
+                    </button>
+                  );
+                })}
+              </div>
             </nav>
           </aside>
         </div>
