@@ -136,11 +136,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
       {/* 3.3 KPI Stat Cards - Row 1 & Row 2 Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Students */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <Users className="h-6 w-6 text-[#2563EB]" />
+        <div 
+          onClick={() => onNavigate('Admissions', 'All Students')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#2563EB]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#2563EB] group-hover:opacity-100 transition-all">
+            <Users className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Total Students</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#2563EB] transition-colors">Total Students</span>
           <div className="text-2xl font-bold mt-1 text-[#111827] font-mono">{activeStudents.length}</div>
           <p className="text-xs text-[#9CA3AF] mt-2 font-medium">
             {db.students.filter(s => s.status === 'inactive').length} inactive | {db.students.filter(s => s.status === 'left').length} left
@@ -148,11 +151,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
         </div>
 
         {/* Staff */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <Briefcase className="h-6 w-6 text-[#10B981]" />
+        <div 
+          onClick={() => onNavigate('Staff')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#10B981]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#10B981] group-hover:opacity-100 transition-all">
+            <Briefcase className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Staff Members</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#10B981] transition-colors">Staff Members</span>
           <div className="text-2xl font-bold mt-1 text-[#111827] font-mono">{activeStaff.length}</div>
           <p className="text-xs text-[#9CA3AF] mt-2 font-medium">
             {db.staff.filter(s => s.status === 'active').length} active teachers
@@ -160,11 +166,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
         </div>
 
         {/* Classes / Subjects */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <BookOpen className="h-6 w-6 text-[#4F46E5]" />
+        <div 
+          onClick={() => onNavigate('Settings', 'Core Management')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#4F46E5]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#4F46E5] group-hover:opacity-100 transition-all">
+            <BookOpen className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Classes / Subjects</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#4F46E5] transition-colors">Classes / Subjects</span>
           <div className="text-2xl font-bold mt-1 text-[#111827] font-mono">
             {classesCount} / {subjectsCount}
           </div>
@@ -172,11 +181,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
         </div>
 
         {/* Exams */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <Calendar className="h-6 w-6 text-[#9333EA]" />
+        <div 
+          onClick={() => onNavigate('Exam Management')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#9333EA]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#9333EA] group-hover:opacity-100 transition-all">
+            <Calendar className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Exams</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#9333EA] transition-colors">Exams</span>
           <div className="text-2xl font-bold mt-1 text-[#111827] font-mono">{examsCount}</div>
           <p className="text-xs text-[#9CA3AF] mt-2 font-medium">
             {db.exam_assignments.length} papers mapped this session
@@ -184,11 +196,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
         </div>
 
         {/* Attendance Pending */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <AlertTriangle className="h-6 w-6 text-[#D97706]" />
+        <div 
+          onClick={() => onNavigate('Attendance')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#D97706]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#D97706] group-hover:opacity-100 transition-all">
+            <AlertTriangle className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Attendance Pending</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#D97706] transition-colors">Attendance Pending</span>
           <div className="text-2xl font-bold mt-1 text-[#111827] font-mono">
             {attendancePendingStudents}
           </div>
@@ -198,11 +213,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
         </div>
 
         {/* Present Today */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <Activity className="h-6 w-6 text-[#0D9488]" />
+        <div 
+          onClick={() => onNavigate('Attendance')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#0D9488]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#0D9488] group-hover:opacity-100 transition-all">
+            <Activity className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Present Today</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#0D9488] transition-colors">Present Today</span>
           <div className="text-2xl font-bold mt-1 text-[#111827] font-mono">
             {presentTodayCount} <span className="text-base font-normal text-[#6B7280]">({presentRate.toFixed(0)}%)</span>
           </div>
@@ -212,11 +230,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
         </div>
 
         {/* Pending Fees */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <DollarSign className="h-6 w-6 text-[#E11D48]" />
+        <div 
+          onClick={() => onNavigate('Fee Management')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#E11D48]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#E11D48] group-hover:opacity-100 transition-all">
+            <DollarSign className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Pending Fees</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#E11D48] transition-colors">Pending Fees</span>
           <div className="text-2xl font-bold mt-1 text-[#111827] font-mono">
             Rs. {totalPendingFees.toLocaleString()}
           </div>
@@ -226,11 +247,14 @@ export default function DashboardView({ db, onNavigate, onRefresh }: DashboardVi
         </div>
 
         {/* This Month Net */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 transition-transform">
-            <TrendingUp className="h-6 w-6 text-[#059669]" />
+        <div 
+          onClick={() => onNavigate('Accounting')}
+          className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm relative overflow-hidden group cursor-pointer hover:border-[#059669]/50 hover:shadow-md transition-all"
+        >
+          <div className="absolute right-4 top-4 text-[#9CA3AF] opacity-40 group-hover:scale-110 group-hover:text-[#059669] group-hover:opacity-100 transition-all">
+            <TrendingUp className="h-6 w-6" />
           </div>
-          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">This Month Net</span>
+          <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider group-hover:text-[#059669] transition-colors">This Month Net</span>
           <div className={`text-2xl font-bold mt-1 font-mono ${netIncomeThisMonth >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
             Rs. {netIncomeThisMonth.toLocaleString()}
           </div>
