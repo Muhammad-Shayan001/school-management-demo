@@ -47,6 +47,8 @@ import IdentityCardsView from './components/IdentityCardsView';
 import GrowthRoadmapView from './components/GrowthRoadmapView';
 import LedgerView from './components/LedgerView';
 import AdditionalView from './components/AdditionalView';
+import CommunicationView from './components/CommunicationView';
+import MetaPages from './components/MetaPages';
 import NotificationDrawer from './components/NotificationDrawer';
 import LoginPage from './components/LoginPage';
 import { ToastContainer, addToast } from './components/Toast';

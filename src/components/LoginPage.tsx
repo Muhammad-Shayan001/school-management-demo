@@ -10,39 +10,25 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
+  const [loading, setLoading] = useState(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError('Please enter both email and password.');
       return;
     }
+    setLoading(true);
+    setError('');
     try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-
-      if (response.ok) {
-        localStorage.setItem('rs_auth', 'true');
-        const payload = await response.json();
-        if (payload?.user?.name) {
-          localStorage.setItem('rs_admin_name', payload.user.name);
-        }
-        setError('');
-        window.location.reload();
-        return;
-      }
-
-      const success = onLogin(email, password);
+      const success = await Promise.resolve(onLogin(email, password));
       if (!success) {
         setError('Invalid credentials. Please try again.');
       }
     } catch {
-      const success = onLogin(email, password);
-      if (!success) {
-        setError('Invalid credentials. Please try again.');
-      }
+      setError('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -163,15 +149,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
               <button
                 type="submit"
-                className="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#182D66] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#182D66]/20 transition hover:bg-[#1f3a84] focus:outline-none focus:ring-4 focus:ring-[#182D66]/20 cursor-pointer"
+                disabled={loading}
+                className="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#182D66] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#182D66]/20 transition hover:bg-[#1f3a84] focus:outline-none focus:ring-4 focus:ring-[#182D66]/20 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Sign In
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                {loading ? 'Signing In...' : 'Sign In'}
+                {!loading && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />}
               </button>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
                 <p className="font-semibold text-slate-700">Demo access</p>
-                <p className="mt-1">Email: admin@school.com</p>
+                <p className="mt-1">Email: rana@school.com</p>
                 <p>Password: admin123</p>
               </div>
             </form>
