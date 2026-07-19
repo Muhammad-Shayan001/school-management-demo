@@ -97,6 +97,7 @@ export interface Student {
   manual_monthly_fee: number; // 0 if uses default class fee
   status: StudentStatus;
   image_url?: string;
+  id_card_no?: string;
 }
 
 export interface Family {
@@ -126,6 +127,7 @@ export interface Staff {
   qualification: string;
   address: string;
   status: 'active' | 'inactive' | 'pending';
+  id_card_no?: string;
 }
 
 export interface StaffAssignment {

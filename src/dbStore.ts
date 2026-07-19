@@ -49,6 +49,23 @@ export function ensureDatabaseExists(): void {
   if (!inMemoryDb || !inMemoryDb.schools || inMemoryDb.schools.length === 0 || !inMemoryDb.classes || inMemoryDb.classes.length === 0) {
     fillDummyData();
   }
+  
+  // Ensure everyone has an ID card number
+  if (inMemoryDb) {
+    let stCounter = 1;
+    inMemoryDb.students.forEach(st => {
+      if (!st.id_card_no) {
+        st.id_card_no = `SK-STU-2026-${String(stCounter++).padStart(6, '0')}`;
+      }
+    });
+    let tCounter = 1;
+    inMemoryDb.staff.forEach(st => {
+      if (!st.id_card_no) {
+        const prefix = st.role === 'admin' ? 'ADM' : st.role === 'principal' ? 'PRI' : 'TCH';
+        st.id_card_no = `SK-${prefix}-2026-${String(tCounter++).padStart(6, '0')}`;
+      }
+    });
+  }
 }
 
 export function getEmptyDatabase(): DatabaseSchema {

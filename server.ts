@@ -1114,14 +1114,32 @@ app.post('/api/attendance/scan', async (req, res) => {
     const { reg_no, date, status } = req.body;
     
     if (!reg_no) {
-      return res.status(400).json({ error: 'Registration number is required.' });
+      return res.status(400).json({ error: 'QR Code data (reg_no or id_card_no) is required.' });
     }
     
     const targetDate = date || new Date().toISOString().split('T')[0];
+    const searchTerm = reg_no.trim().toLowerCase();
     
-    const student = db.students.find(s => s.reg_no.trim().toLowerCase() === reg_no.trim().toLowerCase() && s.status === 'active');
-    if (!student) {
-      return res.status(404).json({ error: `Active student with registration number "${reg_no}" not found.` });
+    let userRole = 'student';
+    let user = db.students.find(s => 
+      (s.id_card_no && s.id_card_no.toLowerCase() === searchTerm) || 
+      (s.reg_no.toLowerCase() === searchTerm)
+    ) as any;
+
+    if (!user) {
+      // Try finding staff
+      user = db.staff.find(s => 
+        (s.id_card_no && s.id_card_no.toLowerCase() === searchTerm) ||
+        (s.employee_id.toLowerCase() === searchTerm)
+      );
+      if (user) userRole = 'staff';
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: `User with ID "${reg_no}" not found.` });
+    }
+    if (user.status !== 'active') {
+      return res.status(400).json({ error: `User account is not active.` });
     }
     
     // Check if calendar day exists and is a working day
@@ -1130,21 +1148,36 @@ app.post('/api/attendance/scan', async (req, res) => {
       return res.status(400).json({ error: 'Cannot mark attendance on holidays/non-working days.' });
     }
     
-    // Remove existing record for this specific student on this date to prevent duplicate rows
-    db.attendance = db.attendance.filter(a => !(a.student_id === student.id && a.date === targetDate));
-    
-    // Push new attendance record
-    const newRecord = {
-      id: `att_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      student_id: student.id,
-      class_id: student.class_id,
-      date: targetDate,
-      status: status || 'present'
-    };
-    
-    db.attendance.push(newRecord);
-    await writeDatabase(db);
-    await pgUpsertAttendance(newRecord);
+    if (userRole === 'student') {
+      // Remove existing record for this specific student on this date to prevent duplicate rows
+      db.attendance = db.attendance.filter(a => !(a.student_id === user.id && a.date === targetDate));
+      
+      const newRecord = {
+        id: `att_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        student_id: user.id,
+        class_id: user.class_id,
+        date: targetDate,
+        status: status || 'present'
+      };
+      
+      db.attendance.push(newRecord);
+      await writeDatabase(db);
+      await pgUpsertAttendance(newRecord);
+    } else {
+      // Staff attendance
+      if (!db.staff_attendance) db.staff_attendance = [];
+      db.staff_attendance = db.staff_attendance.filter((a: any) => !(a.staff_id === user.id && a.date === targetDate));
+      
+      const newRecord = {
+        id: `st_att_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        staff_id: user.id,
+        date: targetDate,
+        status: status || 'present'
+      };
+      db.staff_attendance.push(newRecord);
+      await writeDatabase(db);
+      // Assume a pgUpsertStaffAttendance would go here if we implemented it, for now just in dbStore
+    }
     
     res.json({
       status: 'success',

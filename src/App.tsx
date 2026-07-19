@@ -216,6 +216,15 @@ export default function App() {
   let userObj: any = {};
   try { userObj = JSON.parse(userStr); } catch {}
 
+  if (!db || !schoolBranding) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white space-y-4">
+        <div className="h-10 w-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-xs font-mono text-slate-400 font-bold">Connecting to Database...</span>
+      </div>
+    );
+  }
+
   // If Staff, render Teacher Profile
   if (role === 'staff') {
     return (
@@ -238,14 +247,7 @@ export default function App() {
 
   // Otherwise, Admin Dashboard:
 
-  if (!db || !schoolBranding) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white space-y-4">
-        <Database className="h-10 w-10 text-indigo-500 animate-pulse" />
-        <span className="text-xs font-mono text-slate-400 font-bold">Rana School Admin: Connecting Database...</span>
-      </div>
-    );
-  }
+
 
   // Calculate live alert count for the header trigger button
   const getAlertsCount = () => {
