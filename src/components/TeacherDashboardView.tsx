@@ -69,6 +69,17 @@ export default function TeacherDashboardView({ user, db: initialDb, school, onLo
   const [selectedClassSubject, setSelectedClassSubject] = useState('');
   const [expandedAssignment, setExpandedAssignment] = useState<string | null>(null);
 
+  // Profile Setup State
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    image_url: user.image_url || '',
+    contact: user.contact || user.emergency_contact || '',
+    blood_group: user.blood_group || '',
+    address: user.address || '',
+    password: ''
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+
   // Results states
   const [resClass, setResClass] = useState('');
   const [resSubject, setResSubject] = useState('');
@@ -819,10 +830,17 @@ export default function TeacherDashboardView({ user, db: initialDb, school, onLo
             <div className="flex-1 pb-2">
               <h2 className="text-2xl font-black text-slate-900">{staff.name}</h2>
               <p className="text-slate-500 font-medium">{staff.qualification || 'Teacher'}</p>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex gap-2 mt-1">
                 <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{staff.employee_id}</span>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${staff.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{staff.status?.toUpperCase()}</span>
               </div>
+            </div>
+            <div>
+              <button 
+                onClick={() => setIsEditingProfile(true)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition shadow-sm border border-slate-200">
+                Setup Profile
+              </button>
             </div>
           </div>
         </div>

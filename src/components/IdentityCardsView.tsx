@@ -144,20 +144,20 @@ export default function IdentityCardsView({ db, schoolBranding }: IdentityCardsV
 
             <div className="mt-auto grid grid-cols-2 gap-y-3 gap-x-2 text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
               <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Blood Group</p>
-                <p className="text-xs font-bold text-slate-800">{(user as any).blood_group || 'O+'}</p>
+                <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">Blood Group</p>
+                <p className="text-xs font-bold text-slate-900">{(user as any).blood_group || 'O+'}</p>
               </div>
               <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">DOB</p>
-                <p className="text-xs font-bold text-slate-800">{(user as any).dob || 'N/A'}</p>
+                <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">DOB</p>
+                <p className="text-xs font-bold text-slate-900">{(user as any).dob || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{isStudent ? 'Roll No' : 'Emp ID'}</p>
-                <p className="text-xs font-bold text-slate-800">{isStudent ? (user as Student).reg_no : (user as Staff).employee_id}</p>
+                <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">{isStudent ? 'Roll No' : 'Emp ID'}</p>
+                <p className="text-xs font-bold text-slate-900">{isStudent ? (user as Student).reg_no : (user as Staff).employee_id}</p>
               </div>
               <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Emergency</p>
-                <p className="text-xs font-bold text-slate-800">{(user as any).emergency_contact || (user as any).contact || 'N/A'}</p>
+                <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">Emergency</p>
+                <p className="text-xs font-bold text-slate-900">{(user as any).emergency_contact || (user as any).contact || 'N/A'}</p>
               </div>
             </div>
           </div>
@@ -166,32 +166,32 @@ export default function IdentityCardsView({ db, schoolBranding }: IdentityCardsV
         {/* BACK SIDE */}
         <div className="relative w-full sm:w-1/2 aspect-[6/9] bg-white rounded-[24px] shadow-2xl overflow-hidden border border-slate-100 flex flex-col print:shadow-none print:border-slate-300">
           <div className="p-6 flex-1 flex flex-col items-center justify-center text-center">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Scan for Verification & Attendance</p>
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-4">Scan for Verification & Attendance</p>
             
-            <div className="p-4 bg-white rounded-2xl shadow-sm border-2 border-slate-100">
+            <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200">
               {user.id_card_no ? (
-                <QRCodeCanvas value={user.id_card_no} size={160} level="H" includeMargin={false} />
+                <QRCodeCanvas value={user.id_card_no} size={150} level="H" includeMargin={true} />
               ) : (
-                <div className="w-[160px] h-[160px] bg-slate-100 flex items-center justify-center rounded-xl">
-                  <QrCode className="h-10 w-10 text-slate-300" />
+                <div className="w-[150px] h-[150px] bg-slate-100 flex items-center justify-center rounded-xl">
+                  <QrCode className="h-10 w-10 text-slate-400" />
                 </div>
               )}
             </div>
 
             <div className="mt-6 w-full space-y-3">
               <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 text-left">
-                <MapPin className="h-5 w-5 text-slate-400 shrink-0" />
-                <p className="text-[10px] font-medium text-slate-600 leading-tight">{schoolBranding.address}</p>
+                <MapPin className="h-5 w-5 text-slate-500 shrink-0" />
+                <p className="text-[10px] font-medium text-slate-700 leading-tight">{schoolBranding.address}</p>
               </div>
               <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 text-left">
-                <Phone className="h-5 w-5 text-slate-400 shrink-0" />
-                <p className="text-[10px] font-medium text-slate-600">{schoolBranding.phone}</p>
+                <Phone className="h-5 w-5 text-slate-500 shrink-0" />
+                <p className="text-[10px] font-medium text-slate-700">{schoolBranding.phone}</p>
               </div>
             </div>
           </div>
           
           <div className="bg-slate-900 p-4 text-center">
-            <p className="text-[9px] font-medium text-slate-400 leading-relaxed">
+            <p className="text-[9px] font-medium text-slate-300 leading-relaxed">
               This card is the property of {schoolBranding.name}. If found, please return to the school administration. Use of this card is governed by school policies.
             </p>
           </div>

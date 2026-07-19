@@ -327,6 +327,37 @@ app.post('/api/assignments/submit', async (req, res) => {
   }
 });
 
+app.post('/api/profile/update', async (req, res) => {
+  const db = readDatabase();
+  const { id, role, image_url, contact, blood_group, address, password } = req.body;
+  if (!id || !role) return res.status(400).json({ error: 'ID and Role are required' });
+
+  let user: any;
+  if (role === 'student') {
+    user = db.students.find(s => s.id === id);
+  } else {
+    user = db.staff.find(s => s.id === id);
+  }
+
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (image_url !== undefined) user.image_url = image_url;
+  if (contact !== undefined) {
+    user.contact = contact;
+    user.emergency_contact = contact;
+  }
+  if (blood_group !== undefined) user.blood_group = blood_group;
+  if (address !== undefined) user.address = address;
+  
+  if (password) {
+    user.password_hash = await bcrypt.hash(password, 10);
+  }
+
+  await writeDatabase(db);
+  // Optional: Add specific pgUpsert here if implemented, for now memory+file handles it via ensureDatabaseExists style syncs.
+  res.json({ status: 'success', user });
+});
+
 app.post('/api/logout', async (req, res) => {
   res.json({ status: 'success', message: 'Logged out successfully.' });
 });

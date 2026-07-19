@@ -55,6 +55,18 @@ export default function StudentDashboardView({ user, db: initialDb, school, onLo
   const [submissionText, setSubmissionText] = useState('');
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [markingAttendance, setMarkingAttendance] = useState(false);
+  
+  // Profile Setup State
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    image_url: user.image_url || '',
+    contact: user.contact || user.emergency_contact || '',
+    blood_group: user.blood_group || '',
+    address: user.address || '',
+    password: ''
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+
   const [attendanceMonth, setAttendanceMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -276,6 +288,13 @@ export default function StudentDashboardView({ user, db: initialDb, school, onLo
                 <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{student.reg_no}</span>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${student.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{student.status?.toUpperCase()}</span>
               </div>
+            </div>
+            <div>
+              <button 
+                onClick={() => setIsEditingProfile(true)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition shadow-sm border border-slate-200">
+                Setup Profile
+              </button>
             </div>
           </div>
         </div>
