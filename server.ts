@@ -1046,6 +1046,68 @@ app.post('/api/attendance', async (req, res) => {
   res.json({ status: 'success', message: 'Student attendance saved successfully!' });
 });
 
+// Bulk attendance endpoint for Teacher Portal
+app.post('/api/attendance/bulk', async (req, res) => {
+  const db = readDatabase();
+  const { records } = req.body; // records: [{ student_id, class_id, date, status }]
+
+  if (!records || !Array.isArray(records)) {
+    return res.status(400).json({ error: 'Records must be an array.' });
+  }
+
+  // Group by class+date to clear existing then insert
+  const keys = new Set(records.map((r: any) => `${r.class_id}|${r.date}`));
+  keys.forEach(key => {
+    const [cid, dt] = (key as string).split('|');
+    db.attendance = db.attendance.filter(a => !(a.class_id === cid && a.date === dt));
+  });
+
+  records.forEach((rec: any) => {
+    db.attendance.push({
+      id: `att_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      student_id: rec.student_id,
+      class_id: rec.class_id,
+      date: rec.date,
+      status: rec.status || 'absent'
+    });
+  });
+
+  await writeDatabase(db);
+  res.json({ status: 'success', count: records.length });
+});
+
+// Exam results POST endpoint for Teacher Portal
+app.post('/api/exam-results', async (req, res) => {
+  const db = readDatabase();
+  const { exam_id, student_id, subject_id, marks_obtained, marks_total } = req.body;
+
+  if (!exam_id || !student_id || !subject_id) {
+    return res.status(400).json({ error: 'exam_id, student_id, subject_id are required.' });
+  }
+
+  // Remove existing result for this combination
+  if (!db.exam_results) db.exam_results = [];
+  db.exam_results = db.exam_results.filter(
+    r => !(r.exam_id === exam_id && r.student_id === student_id && r.subject_id === subject_id)
+  );
+
+  const newResult = {
+    id: `res_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    exam_id,
+    student_id,
+    subject_id,
+    marks_obtained: Number(marks_obtained) || 0,
+    marks_total: Number(marks_total) || 100
+  };
+
+  db.exam_results.push(newResult);
+  await writeDatabase(db);
+  try { await pgUpsertExamResult(newResult); } catch (_) { /* ok */ }
+  res.json({ status: 'success', data: newResult });
+});
+
+
+
 app.post('/api/attendance/scan', async (req, res) => {
   try {
     const db = readDatabase();
