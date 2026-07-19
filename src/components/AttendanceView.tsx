@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   AlertCircle
 } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { DatabaseSchema, Student, Attendance, CalendarDay } from '../types';
 import { addToast } from './Toast';
 
@@ -36,6 +37,7 @@ export default function AttendanceView({ db, onRefresh }: AttendanceViewProps) {
   // Student marking states
   const [selectedClassId, setSelectedClassId] = useState('');
   const [attendanceDate, setAttendanceDate] = useState('2026-04-24');
+  const [studentSearch, setStudentSearch] = useState('');
   
   // Local student records copy with status mapping
   const [localAttendance, setLocalAttendance] = useState<{ [sid: string]: 'present' | 'absent' | 'leave' }>({});
@@ -174,6 +176,44 @@ export default function AttendanceView({ db, onRefresh }: AttendanceViewProps) {
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    if (currentSubTab === 'QR ID Card Scanner') {
+      let scanner: Html5QrcodeScanner | null = null;
+      try {
+        scanner = new Html5QrcodeScanner(
+          "qr-reader",
+          { fps: 10, qrbox: {width: 250, height: 250} },
+          false
+        );
+        scanner.render(
+          (decodedText: string) => {
+            handleProcessScan(decodedText);
+            // pause briefly so we don't scan repeatedly
+            if (scanner) {
+              scanner.pause(true);
+              setTimeout(() => {
+                if (scanner) scanner.resume();
+              }, 2000);
+            }
+          },
+          (error: any) => {
+            // ignore constant read errors
+          }
+        );
+      } catch (e) {
+        console.error("QR Scanner Init Error", e);
+      }
+      
+      return () => {
+        if (scanner) {
+          scanner.clear().catch((error: any) => {
+            console.error("Failed to clear scanner. ", error);
+          });
+        }
+      };
+    }
+  }, [currentSubTab]);
 
   // QR Code / ID Card Scanner States
   interface ScannedArrival {
@@ -380,6 +420,16 @@ export default function AttendanceView({ db, onRefresh }: AttendanceViewProps) {
               {/* Filtering row */}
               <div className="flex flex-wrap gap-2.5">
                 <div className="flex items-center gap-1.5">
+                  <div className="relative mr-2">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search student..."
+                      value={studentSearch}
+                      onChange={e => setStudentSearch(e.target.value)}
+                      className="text-xs p-2 pl-8 border border-gray-200 rounded-lg focus:outline-none w-40"
+                    />
+                  </div>
                   <span className="text-xs font-semibold text-gray-500">Class:</span>
                   <select
                     value={selectedClassId}
@@ -434,7 +484,7 @@ export default function AttendanceView({ db, onRefresh }: AttendanceViewProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {db.students.filter(s => s.class_id === selectedClassId && s.status === 'active').map(s => (
+                  {db.students.filter(s => s.class_id === selectedClassId && s.status === 'active' && (s.name.toLowerCase().includes(studentSearch.toLowerCase()) || s.reg_no.toLowerCase().includes(studentSearch.toLowerCase()))).map(s => (
                     <tr key={s.id} className="hover:bg-gray-50/50">
                       <td className="p-3 font-mono font-bold text-gray-700">{s.reg_no}</td>
                       <td className="p-3 font-bold text-gray-800">{s.name}</td>
@@ -590,7 +640,7 @@ export default function AttendanceView({ db, onRefresh }: AttendanceViewProps) {
                 {isDateWorking && (
                   <div className="absolute left-0 w-full h-0.5 bg-rose-500 shadow-[0_0_12px_#ef4444] animate-laser z-10 pointer-events-none"></div>
                 )}
-
+                
                 {/* Grid Overlay for Scanning Vibe */}
                 <div className="absolute inset-0 bg-[linear-gradient(rgba(18,24,38,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(18,24,38,0.04)_1px,transparent_1px)] bg-size-[20px_20px] pointer-events-none opacity-20"></div>
 
@@ -600,17 +650,8 @@ export default function AttendanceView({ db, onRefresh }: AttendanceViewProps) {
                 <div className="absolute bottom-6 right-6 w-5 h-5 border-b-2 border-r-2 border-indigo-500"></div>
                 <div className="absolute bottom-6 left-6 w-5 h-5 border-b-2 border-l-2 border-indigo-500"></div>
 
-                {/* Scanner center visual badge */}
-                <div className="space-y-3 z-10 p-4 max-w-sm">
-                  <div className="mx-auto h-16 w-16 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center text-slate-500 shadow-md group-hover:border-indigo-500 transition-colors">
-                    <QrCode className="h-8 w-8 text-indigo-400 animate-pulse" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-mono font-bold text-slate-100 tracking-wider">PLACE STUDENT ID CARD HERE</p>
-                    <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
-                      Present card under the camera grid or tap 'Simulate Card Scan' from the bottom student list below to capture instant entry.
-                    </p>
-                  </div>
+                <div className="relative z-20 w-full h-full flex flex-col items-center justify-center p-8">
+                  <div id="qr-reader" className="w-full max-w-sm rounded-lg overflow-hidden" style={{border: 'none'}}></div>
                 </div>
 
                 {!isDateWorking && (

@@ -47,6 +47,7 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
   // Report Card selection state
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
   const [studentSearch, setStudentSearch] = useState('');
+  const [studentSearchMarks, setStudentSearchMarks] = useState('');
 
   // Load defaults
   useEffect(() => {
@@ -416,6 +417,17 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
 
             {/* Filter selectors row */}
             <div className="flex flex-wrap gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search student..."
+                  value={studentSearchMarks}
+                  onChange={e => setStudentSearchMarks(e.target.value)}
+                  className="text-xs p-2 pl-8 border border-gray-200 rounded bg-white focus:outline-none w-40"
+                />
+              </div>
+
               <select
                 value={selectedExamId}
                 onChange={e => setSelectedExamId(e.target.value)}
@@ -475,7 +487,7 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {db.students
-                  .filter(s => s.class_id === selectedClassId && s.status === 'active')
+                  .filter(s => s.class_id === selectedClassId && s.status === 'active' && (s.name.toLowerCase().includes(studentSearchMarks.toLowerCase()) || s.reg_no.toLowerCase().includes(studentSearchMarks.toLowerCase())))
                   .map(s => {
                     const studentScore = marksMap[s.id] || { obtained: 0, total: 100 };
                     return (
@@ -593,7 +605,8 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
                 </div>
 
                 {/* Report Portrait Sheet fits A4 */}
-                <div className="w-[595px] min-h-[842px] bg-white border border-gray-200 shadow-xl rounded p-12 flex flex-col justify-between font-sans text-xs text-gray-800">
+                <div className="w-full overflow-x-auto pb-4 max-w-full">
+                  <div className="w-[595px] min-h-[842px] bg-white border border-gray-200 shadow-xl rounded p-12 flex flex-col justify-between font-sans text-xs text-gray-800 mx-auto">
                   {/* Report Header school branding */}
                   <div className="text-center border-b-2 border-slate-900 pb-5">
                     <h1 className="text-xl font-extrabold text-slate-900 uppercase tracking-wide">
@@ -712,6 +725,7 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
                       <div className="text-center w-28 border-t border-gray-200 pt-1">
                         Principal Seal &amp; Sign
                       </div>
+                    </div>
                     </div>
                   </div>
                 </div>

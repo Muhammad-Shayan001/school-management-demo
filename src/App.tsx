@@ -259,10 +259,7 @@ export default function App() {
   const bottomNav = [
     { name: 'Request a Feature', icon: Lightbulb },
     { name: 'Our Services', icon: Briefcase },
-    { name: 'Developer Info', icon: Server },
-    { name: 'Bulk Operations', icon: Database },
     { name: 'Backup / Import', icon: FileArchive },
-    { name: 'Old Data', icon: Database },
     { name: 'Erase All Data', icon: Trash2, action: handleWipeDatabase },
     { name: 'Logout', icon: LogOut, action: handleLogout }
   ];
@@ -522,12 +519,12 @@ export default function App() {
             <CommunicationView />
           )}
 
-          {(currentPage === 'Backup / Import' || currentPage === 'Old Data') && (
+          {(currentPage === 'Backup / Import') && (
             <MetaPages page={currentPage} db={db} onRefresh={refreshDatabase} />
           )}
 
           {/* Work in progress pages */}
-          {['Birthdays', 'Request a Feature', 'Our Services', 'Developer Info', 'Bulk Operations'].includes(currentPage) && (
+          {['Birthdays', 'Request a Feature', 'Our Services'].includes(currentPage) && (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
               <div className="p-4 bg-gray-50 rounded-full">
                 <LayoutDashboard className="h-8 w-8 text-gray-300" />

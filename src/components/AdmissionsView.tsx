@@ -55,6 +55,9 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
   const [classFilter, setClassFilter] = useState<string>('all');
   const [billingFilter, setBillingFilter] = useState<string>('all');
 
+  // Certificate selection state
+  const [certSelections, setCertSelections] = useState<Record<string, string>>({});
+
   // Load defaults
   useEffect(() => {
     if (db.classes.length > 0) {
@@ -90,6 +93,7 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
 
     try {
       const payload = {
+        name: studentName.trim(),
         father_name: fatherName.trim(),
         gender,
         dob,
@@ -114,7 +118,7 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
       });
 
       if (res.ok) {
-        alert('Student registered successfully!');
+        addToast('success', 'Student registered successfully!');
         // Reset states
         setStudentName('');
         setFatherName('');
@@ -130,12 +134,66 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
         
         onRefresh();
         setCurrentSubTab('All Students');
+      } else {
+        const errorData = await res.json();
+        addToast('error', errorData.error || 'Failed to register student.');
       }
     } catch (err) {
-              addToast('success', 'Student registered successfully!');
       console.error(err);
       addToast('error', 'An error occurred during student registration.');
     }
+  };
+
+  const handlePrintCertificate = (certType: string) => {
+    const studentId = certSelections[certType];
+    if (!studentId) {
+      addToast('warning', 'Please select a student first.');
+      return;
+    }
+    const student = db.students.find(s => s.id === studentId);
+    if (!student) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>${certType} - ${student.name}</title>
+          <style>
+            body { font-family: 'Times New Roman', serif; padding: 40px; margin: 0; color: #000; }
+            .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #000; padding-bottom: 20px; }
+            .title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 20px 0; text-align: center; text-decoration: underline; }
+            .content { font-size: 18px; line-height: 2; text-align: justify; margin: 40px 0; }
+            .footer { margin-top: 100px; display: flex; justify-content: space-between; font-size: 16px; }
+            .sign-line { border-top: 1px solid #000; width: 200px; text-align: center; padding-top: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>School Management System</h1>
+            <p>Excellence in Education</p>
+          </div>
+          <div class="title">${certType}</div>
+          <div class="content">
+            <p>This is to certify that <strong>${student.name}</strong>, 
+            ${student.gender === 'female' ? 'daughter' : 'son'} of <strong>${student.father_name}</strong>, 
+            registration number <strong>${student.reg_no}</strong>, is a bonafide student of this institution.</p>
+            <p>According to our records, the student's date of birth is <strong>${new Date(student.dob).toLocaleDateString()}</strong>.</p>
+            <p>This certificate is issued upon the request of the student/guardian on ${new Date().toLocaleDateString()}.</p>
+          </div>
+          <div class="footer">
+            <div class="sign-line">Date</div>
+            <div class="sign-line">Principal Signature</div>
+          </div>
+          <script>
+            window.onload = () => { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   return (
@@ -705,14 +763,21 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
                 <p className="text-xs text-gray-500 mt-1 mb-4">Select student to generate {certType.toLowerCase()} with official format.</p>
                 
                 <div className="space-y-3">
-                  <select className="w-full text-xs p-2.5 border border-gray-200 rounded-lg bg-white focus:outline-none">
+                  <select 
+                    value={certSelections[certType] || ''}
+                    onChange={(e) => setCertSelections({...certSelections, [certType]: e.target.value})}
+                    className="w-full text-xs p-2.5 border border-gray-200 rounded-lg bg-white focus:outline-none"
+                  >
                     <option value="">-- Select Student --</option>
                     {db.students.map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.reg_no})</option>
                     ))}
                   </select>
                   
-                  <button className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white font-medium text-xs rounded-lg transition-all cursor-pointer">
+                  <button 
+                    onClick={() => handlePrintCertificate(certType)}
+                    className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white font-medium text-xs rounded-lg transition-all cursor-pointer"
+                  >
                     Generate & Print PDF
                   </button>
                 </div>
