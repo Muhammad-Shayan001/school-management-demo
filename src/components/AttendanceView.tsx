@@ -180,36 +180,50 @@ export default function AttendanceView({ db, onRefresh }: AttendanceViewProps) {
   useEffect(() => {
     if (currentSubTab === 'QR ID Card Scanner') {
       let scanner: Html5QrcodeScanner | null = null;
-      try {
-        scanner = new Html5QrcodeScanner(
-          "qr-reader",
-          { fps: 10, qrbox: {width: 250, height: 250} },
-          false
-        );
-        scanner.render(
-          (decodedText: string) => {
-            handleProcessScan(decodedText);
-            // pause briefly so we don't scan repeatedly
-            if (scanner) {
-              scanner.pause(true);
-              setTimeout(() => {
-                if (scanner) scanner.resume();
-              }, 2000);
+      let isMounted = true;
+      
+      const initScanner = () => {
+        try {
+          if (!isMounted) return;
+          scanner = new Html5QrcodeScanner(
+            "qr-reader",
+            { 
+              fps: 10, 
+              qrbox: {width: 250, height: 250},
+              supportedScanTypes: [0, 1] // 0 = Camera, 1 = File Upload
+            },
+            false
+          );
+          scanner.render(
+            (decodedText: string) => {
+              handleProcessScan(decodedText);
+              if (scanner) {
+                scanner.pause(true);
+                setTimeout(() => {
+                  if (scanner && isMounted) scanner.resume();
+                }, 2000);
+              }
+            },
+            (error: any) => {
+              // ignore constant read errors
             }
-          },
-          (error: any) => {
-            // ignore constant read errors
-          }
-        );
-      } catch (e) {
-        console.error("QR Scanner Init Error", e);
-      }
+          );
+        } catch (e) {
+          console.error("QR Scanner Init Error", e);
+        }
+      };
+
+      // Slight delay to ensure DOM element is ready
+      setTimeout(initScanner, 100);
       
       return () => {
+        isMounted = false;
         if (scanner) {
-          scanner.clear().catch((error: any) => {
-            console.error("Failed to clear scanner. ", error);
-          });
+          try {
+            scanner.clear().catch((error: any) => {
+              console.error("Failed to clear scanner.", error);
+            });
+          } catch(e) {}
         }
       };
     }

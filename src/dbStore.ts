@@ -107,6 +107,8 @@ export function getEmptyDatabase(): DatabaseSchema {
     stationery_items: [],
     inventory_items: [],
     exam_results: [],
+    assignments: [],
+    assignment_submissions: []
   };
 }
 

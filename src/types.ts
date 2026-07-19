@@ -70,7 +70,7 @@ export interface ExamAssignment {
   subject_id: string;
 }
 
-export type StudentStatus = 'active' | 'inactive' | 'left';
+export type StudentStatus = 'active' | 'inactive' | 'left' | 'pending';
 export type BillingMode = 'individual' | 'family';
 
 export interface Student {
@@ -124,7 +124,7 @@ export interface Staff {
   salary: number;
   qualification: string;
   address: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'pending';
 }
 
 export interface StaffAssignment {
@@ -250,6 +250,28 @@ export interface ExamResult {
   marks_total: number;
 }
 
+export interface Assignment {
+  id: string;
+  school_id: string;
+  class_id: string;
+  subject_id: string;
+  teacher_id: string;
+  title: string;
+  description: string;
+  due_date: string;
+  created_at: string;
+}
+
+export interface AssignmentSubmission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  content: string;
+  submitted_at: string;
+  grade?: string;
+  feedback?: string;
+}
+
 // Complete schema state stored in database file
 export interface DatabaseSchema {
   schools: School[];
@@ -277,4 +299,6 @@ export interface DatabaseSchema {
   stationery_items: StationeryItem[];
   inventory_items: InventoryItem[];
   exam_results: ExamResult[];
+  assignments: Assignment[];
+  assignment_submissions: AssignmentSubmission[];
 }

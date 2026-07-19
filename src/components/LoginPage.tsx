@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { School, Database, Lock, User, ArrowRight, ShieldCheck, Sparkles, ChevronRight } from 'lucide-react';
 
 interface LoginPageProps {
-  onLogin: (email: string, pass: string) => boolean | Promise<boolean>;
+  onLogin: (email: string, pass: string) => Promise<string | null>;
+  onNavigateSignup: () => void;
 }
 
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage({ onLogin, onNavigateSignup }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -21,9 +22,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true);
     setError('');
     try {
-      const success = await Promise.resolve(onLogin(email, password));
-      if (!success) {
-        setError('Invalid credentials. Please try again.');
+      const errorMsg = await onLogin(email, password);
+      if (errorMsg) {
+        setError(errorMsg);
       }
     } catch {
       setError('Login failed. Please try again.');
@@ -163,8 +164,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </form>
 
-            <p className="mt-4 text-center text-xs text-slate-500 lg:text-left">
-              Secure local session with browser persistence.
+            <p className="mt-4 text-center text-sm text-slate-600 lg:text-left">
+              Don't have an account?{' '}
+              <button onClick={onNavigateSignup} className="font-semibold text-[#182D66] hover:underline">
+                Sign Up
+              </button>
             </p>
           </div>
         </div>

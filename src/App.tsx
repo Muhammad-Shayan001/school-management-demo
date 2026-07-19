@@ -51,6 +51,10 @@ import CommunicationView from './components/CommunicationView';
 import MetaPages from './components/MetaPages';
 import NotificationDrawer from './components/NotificationDrawer';
 import LoginPage from './components/LoginPage';
+import SignupPage from './components/SignupPage';
+import TeacherDashboardView from './components/TeacherDashboardView';
+import StudentDashboardView from './components/StudentDashboardView';
+import ApprovalsView from './components/ApprovalsView';
 import { ToastContainer, addToast } from './components/Toast';
 
 export default function App() {
@@ -59,6 +63,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<string>('Dashboard');
   const [currentSubTab, setCurrentSubTab] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authView, setAuthView] = useState<'login' | 'signup'>('login');
   
   // Navigation state
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
@@ -99,37 +104,44 @@ export default function App() {
     }
   };
 
-  const handleLogin = async (email: string, pass: string): Promise<boolean> => {
+  const handleLogin = async (email: string, pass: string): Promise<string | null> => {
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: pass }),
       });
+      const data = await res.json();
+      
       if (res.ok) {
-        const data = await res.json();
         localStorage.setItem('rs_auth', 'true');
+        localStorage.setItem('rs_role', data.user?.role || 'admin');
+        localStorage.setItem('rs_user', JSON.stringify(data.user || {}));
         localStorage.setItem('rs_admin_name', data.user?.name || 'Admin');
         setIsAuthenticated(true);
-        return true;
+        return null; // success
       }
-      return false;
+      return data.error || 'Invalid credentials. Please try again.';
     } catch (err) {
       // Fallback: allow demo login if server is unreachable
       if ((email === 'rana@school.com' || email === 'admin@school.com') && pass === 'admin123') {
         localStorage.setItem('rs_auth', 'true');
+        localStorage.setItem('rs_role', 'admin');
         setIsAuthenticated(true);
-        return true;
+        return null;
       }
-      return false;
+      return 'Network error. Please try again.';
     }
   };
 
   const handleLogout = () => {
     fetch('/api/logout', { method: 'POST' }).catch(() => undefined);
     localStorage.removeItem('rs_auth');
+    localStorage.removeItem('rs_role');
+    localStorage.removeItem('rs_user');
     localStorage.removeItem('rs_admin_name');
     setIsAuthenticated(false);
+    setAuthView('login');
   };
 
   const handleUpdateBrandingInUI = (newBranding: Partial<School>) => {
@@ -185,13 +197,46 @@ export default function App() {
   };
 
   if (!isAuthenticated) {
+    if (authView === 'signup') {
+      return (
+        <div className="font-sans text-slate-900 antialiased min-h-screen bg-slate-50 selection:bg-[#182D66] selection:text-white flex flex-col">
+          <SignupPage onBackToLogin={() => setAuthView('login')} />
+        </div>
+      );
+    }
     return (
-      <>
-        <LoginPage onLogin={handleLogin} />
-        <ToastContainer />
-      </>
+      <div className="font-sans text-slate-900 antialiased min-h-screen bg-slate-50 selection:bg-[#182D66] selection:text-white flex flex-col">
+        <LoginPage onLogin={handleLogin} onNavigateSignup={() => setAuthView('signup')} />
+      </div>
     );
   }
+
+  const role = localStorage.getItem('rs_role') || 'admin';
+  const userStr = localStorage.getItem('rs_user') || '{}';
+  let userObj: any = {};
+  try { userObj = JSON.parse(userStr); } catch {}
+
+  // If Staff, render Teacher Profile
+  if (role === 'staff') {
+    return (
+      <div className="font-sans text-slate-900 antialiased min-h-screen bg-slate-50 flex flex-col">
+        <TeacherDashboardView user={userObj} db={db} onLogout={handleLogout} school={schoolBranding || ({} as any)} />
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  // If Student, render Student Profile
+  if (role === 'student') {
+    return (
+      <div className="font-sans text-slate-900 antialiased min-h-screen bg-slate-50 flex flex-col">
+        <StudentDashboardView user={userObj} db={db} onLogout={handleLogout} school={schoolBranding || ({} as any)} />
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  // Otherwise, Admin Dashboard:
 
   if (!db || !schoolBranding) {
     return (
@@ -229,7 +274,7 @@ export default function App() {
     { name: 'Dashboard', icon: LayoutDashboard },
     { 
       name: 'Settings', icon: Settings, 
-      subItems: ['Settings Overview', 'Core Management', 'Session Management', 'Fee Policy', 'Class Billing Rules', 'School Branding'] 
+      subItems: ['Settings Overview', 'Core Management', 'Session Management', 'Fee Policy', 'Class Billing Rules', 'School Branding', 'User Approvals'] 
     },
     { 
       name: 'Communication', icon: MessageSquare,
@@ -521,6 +566,12 @@ export default function App() {
 
           {(currentPage === 'Backup / Import') && (
             <MetaPages page={currentPage} db={db} onRefresh={refreshDatabase} />
+          )}
+          {currentPage === 'Settings' && currentSubTab === 'User Approvals' && (
+            <ApprovalsView
+              db={db}
+              refreshDatabase={refreshDatabase}
+            />
           )}
 
           {/* Work in progress pages */}
