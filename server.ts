@@ -602,23 +602,6 @@ app.post('/api/backups/snapshots/restore', async (req, res) => {
     // Create an automatic pre-restore backup just in case!
     const preRestoreFilename = `pre_restore_backup_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     fs.writeFileSync(path.join(SNAPSHOTS_DIR, preRestoreFilename), JSON.stringify(readDatabase(), null, 2), 'utf-8');
-    inventory_items: [],
-    exam_results: [],
-    assignments: [],
-    assignment_submissions: []
-  };
-
-  try {
-    const data = fs.readFileSync(DB_FILE, 'utf-8');
-    const parsed = JSON.parse(data);
-    parsed.assignments = parsed.assignments || [];
-    parsed.assignment_submissions = parsed.assignment_submissions || [];
-    return { ...defaultDb, ...parsed };
-  } catch {
-    return defaultDb;
-  }
-}
-    
     const snapshotData = JSON.parse(fs.readFileSync(sourcePath, 'utf-8'));
     await writeDatabase(snapshotData);
     
