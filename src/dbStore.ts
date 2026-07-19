@@ -46,7 +46,7 @@ function loadDatabase(): DatabaseSchema {
 }
 
 export function ensureDatabaseExists(): void {
-  if (!inMemoryDb || !inMemoryDb.schools || inMemoryDb.schools.length === 0) {
+  if (!inMemoryDb || !inMemoryDb.schools || inMemoryDb.schools.length === 0 || !inMemoryDb.classes || inMemoryDb.classes.length === 0) {
     fillDummyData();
   }
 }
@@ -169,16 +169,20 @@ export function fillDummyData(): void {
   };
   db.sessions = [session1];
 
-  const grade1: Class = { id: 'class_g1', school_id: schoolId, name: 'Grade 1' };
-  const grade5: Class = { id: 'class_g5', school_id: schoolId, name: 'Grade 5' };
-  const grade8: Class = { id: 'class_g8', school_id: schoolId, name: 'Grade 8' };
-  db.classes = [grade1, grade5, grade8];
+  const classNames = ['Prep', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'];
+  const classes: Class[] = classNames.map((name, i) => ({
+    id: `class_g${i}`,
+    school_id: schoolId,
+    name
+  }));
+  db.classes = classes;
 
-  const secA: Section = { id: 'sec_a', class_id: 'class_g1', name: 'A' };
-  const secB: Section = { id: 'sec_b', class_id: 'class_g5', name: 'A' };
-  const secC: Section = { id: 'sec_c', class_id: 'class_g5', name: 'B' };
-  const secD: Section = { id: 'sec_d', class_id: 'class_g8', name: 'A' };
-  db.sections = [secA, { id: 'sec_1b', class_id: 'class_g1', name: 'B' }, secB, secC, secD];
+  const sections: Section[] = [];
+  classes.forEach(cls => {
+    sections.push({ id: `sec_${cls.id}_a`, class_id: cls.id, name: 'A' });
+    sections.push({ id: `sec_${cls.id}_b`, class_id: cls.id, name: 'B' });
+  });
+  db.sections = sections;
 
   const eng: Subject = { id: 'subj_eng', school_id: schoolId, name: 'English' };
   const urd: Subject = { id: 'subj_urd', school_id: schoolId, name: 'Urdu' };

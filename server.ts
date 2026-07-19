@@ -474,19 +474,41 @@ app.get('/api/db', async (req, res) => {
     const supabaseUrl = process.env.SUPABASE_URL || '';
     const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
 
+    // Always start with seeded in-memory data as the guaranteed base
+    const seededDb = readDatabase();
+
     if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase credentials');
+      return res.json(seededDb);
     }
 
     const { success, data, error } = await pullDataFromSupabase(supabaseUrl, supabaseKey);
+
     if (!success || !data) {
-      throw new Error(error || 'Failed to pull data from Supabase');
+      console.error('Supabase pull failed, using seeded in-memory data:', error);
+      return res.json(seededDb);
     }
 
-    res.json(data);
+    // Merge: use Supabase data but fall back to seeded data for core structural
+    // tables (classes, sections, subjects) if Supabase returns them empty.
+    // This ensures the UI always has data to work with even on a fresh Supabase DB.
+    const merged = {
+      ...seededDb,
+      ...data,
+      classes: (data.classes && data.classes.length > 0) ? data.classes : seededDb.classes,
+      sections: (data.sections && data.sections.length > 0) ? data.sections : seededDb.sections,
+      subjects: (data.subjects && data.subjects.length > 0) ? data.subjects : seededDb.subjects,
+      class_subjects: (data.class_subjects && data.class_subjects.length > 0) ? data.class_subjects : seededDb.class_subjects,
+      sessions: (data.sessions && data.sessions.length > 0) ? data.sessions : seededDb.sessions,
+      schools: (data.schools && data.schools.length > 0) ? data.schools : seededDb.schools,
+      // Always merge assignments (new tables not yet in Supabase schema)
+      assignments: seededDb.assignments || [],
+      assignment_submissions: seededDb.assignment_submissions || [],
+    };
+
+    return res.json(merged);
   } catch (err) {
-    console.error('Supabase connection failed or not initialized, falling back to in-memory dbStore:', err);
-    res.json(readDatabase());
+    console.error('Supabase connection failed, falling back to in-memory dbStore:', err);
+    return res.json(readDatabase());
   }
 });
 
