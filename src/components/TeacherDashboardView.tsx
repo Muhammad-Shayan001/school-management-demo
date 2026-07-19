@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DatabaseSchema, School, Staff } from '../types';
 import { addToast } from './Toast';
 import {
@@ -46,6 +46,11 @@ function StatCard({ label, value, icon: Icon, color, sub }: any) {
 
 export default function TeacherDashboardView({ user, db: initialDb, school, onLogout }: TeacherDashboardViewProps) {
   const [db, setDb] = useState<DatabaseSchema | null>(initialDb);
+
+  useEffect(() => {
+    setDb(initialDb);
+  }, [initialDb]);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 

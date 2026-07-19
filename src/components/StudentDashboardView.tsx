@@ -45,6 +45,11 @@ function StatCard({ label, value, icon: Icon, color, sub }: any) {
 
 export default function StudentDashboardView({ user, db: initialDb, school, onLogout }: StudentDashboardViewProps) {
   const [db, setDb] = useState<DatabaseSchema | null>(initialDb);
+
+  useEffect(() => {
+    setDb(initialDb);
+  }, [initialDb]);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [submissionText, setSubmissionText] = useState('');
