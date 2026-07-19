@@ -85,8 +85,12 @@ export default function StudentDashboardView({ user, db: initialDb, school, onLo
           <div className="absolute right-0 top-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-6">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 border-4 border-white/20 backdrop-blur-md">
-                <UserCircle className="h-10 w-10 text-white" />
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 border-4 border-white/20 backdrop-blur-md overflow-hidden">
+                {student.image_url ? (
+                  <img src={student.image_url} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <UserCircle className="h-10 w-10 text-white" />
+                )}
               </div>
               <div>
                 <p className="text-blue-200 text-sm font-medium uppercase tracking-widest mb-1">Welcome back,</p>

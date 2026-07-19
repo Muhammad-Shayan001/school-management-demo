@@ -96,6 +96,7 @@ export interface Student {
   family_id: string; // references Family.id (can be empty string if individual)
   manual_monthly_fee: number; // 0 if uses default class fee
   status: StudentStatus;
+  image_url?: string;
 }
 
 export interface Family {

@@ -774,14 +774,15 @@ app.post('/api/students', async (req, res) => {
   const year = new Date().getFullYear();
   const reg_no = `RS-${year}-${regNoSuffix}`;
 
-  const defaultPassword = Math.random().toString(36).slice(-6);
+  const defaultPassword = req.body.password || Math.random().toString(36).slice(-6);
   const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const login_id = req.body.email ? String(req.body.email).toLowerCase() : (req.body.name.toLowerCase().replace(/\s+/g, '_') + '_' + regNoSuffix);
 
   const newStudent: Student = {
     id: `stud_${Date.now()}`,
     school_id: 'school_1',
     reg_no,
-    login_id: req.body.name.toLowerCase().replace(/\s+/g, '_') + '_' + regNoSuffix,
+    login_id,
     password_hash: passwordHash,
     name: req.body.name,
     father_name: req.body.father_name,
@@ -799,7 +800,8 @@ app.post('/api/students', async (req, res) => {
     billing_mode: req.body.billing_mode || 'individual',
     family_id: req.body.family_id || '',
     manual_monthly_fee: Number(req.body.manual_monthly_fee) || 0,
-    status: req.body.status || 'active'
+    status: req.body.status || 'active',
+    image_url: req.body.image_url || ''
   };
 
   db.students.push(newStudent);
