@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DatabaseSchema, Student, Staff, School } from '../types';
 import { Search, Printer, Download, UserCircle, QrCode, ShieldCheck, MapPin, Phone, CheckCircle2 } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -107,10 +107,10 @@ export default function IdentityCardsView({ db, schoolBranding }: IdentityCardsV
     }
 
     return (
-      <div ref={cardRef} className="flex flex-col sm:flex-row gap-6 w-full max-w-[700px] mx-auto print:block print:max-w-none">
+      <div ref={cardRef} className="flex flex-col sm:flex-row gap-6 mx-auto items-center justify-center print:flex-row print:justify-start">
         
         {/* FRONT SIDE */}
-        <div className="relative w-full sm:w-1/2 aspect-[6/9] bg-white rounded-[24px] shadow-2xl overflow-hidden border border-slate-100 flex flex-col print:shadow-none print:border-slate-300 print:mb-8">
+        <div className="relative w-[320px] h-[505px] flex-shrink-0 bg-white rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden border border-slate-100 flex flex-col print:shadow-none print:border-slate-300">
           {/* Header Gradient */}
           <div className={`h-[35%] bg-gradient-to-br ${theme} relative`}>
             <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent" />
@@ -164,13 +164,13 @@ export default function IdentityCardsView({ db, schoolBranding }: IdentityCardsV
         </div>
 
         {/* BACK SIDE */}
-        <div className="relative w-full sm:w-1/2 aspect-[6/9] bg-white rounded-[24px] shadow-2xl overflow-hidden border border-slate-100 flex flex-col print:shadow-none print:border-slate-300">
+        <div className="relative w-[320px] h-[505px] flex-shrink-0 bg-white rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden border border-slate-100 flex flex-col print:shadow-none print:border-slate-300">
           <div className="p-6 flex-1 flex flex-col items-center justify-center text-center">
             <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-4">Scan for Verification & Attendance</p>
             
-            <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-200">
+            <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-200 flex items-center justify-center">
               {user.id_card_no ? (
-                <QRCodeCanvas value={user.id_card_no} size={150} level="H" includeMargin={true} />
+                <QRCodeSVG value={user.id_card_no} size={150} level="H" includeMargin={true} />
               ) : (
                 <div className="w-[150px] h-[150px] bg-slate-100 flex items-center justify-center rounded-xl">
                   <QrCode className="h-10 w-10 text-slate-400" />
