@@ -30,6 +30,7 @@ import {
   FileJson
 } from 'lucide-react';
 import { DatabaseSchema, Class, Section, Subject, ClassSubject, Session, School } from '../types';
+import { addToast } from './Toast';
 import {
   getSupabaseConfig,
   saveSupabaseConfig,
@@ -61,6 +62,12 @@ export default function SettingsView({ db, schoolBranding, onUpdateBranding, onR
   const [assignSelectedClassId, setAssignSelectedClassId] = useState('');
   const [assignSelectedSubjectIds, setAssignSelectedSubjectIds] = useState<string[]>([]);
   const [subjectSearchQuery, setSubjectSearchQuery] = useState('');
+
+  // Class Billing Rules (Class Fee Overrides) states
+  const [showAddFeeRuleForm, setShowAddFeeRuleForm] = useState(false);
+  const [ruleClassId, setRuleClassId] = useState('');
+  const [ruleMonthlyFee, setRuleMonthlyFee] = useState('');
+  const [savingFeeRule, setSavingFeeRule] = useState(false);
 
   // Branding states
   const [schoolName, setSchoolName] = useState(schoolBranding.name);
@@ -358,6 +365,55 @@ export default function SettingsView({ db, schoolBranding, onUpdateBranding, onR
     }
   };
 
+  const handleAddClassFeeRule = async () => {
+    if (!ruleClassId) {
+      addToast('warning', 'Please select a class.');
+      return;
+    }
+    const fee = Number(ruleMonthlyFee);
+    if (!fee || fee <= 0) {
+      addToast('warning', 'Please enter a valid monthly fee amount.');
+      return;
+    }
+    setSavingFeeRule(true);
+    try {
+      const res = await fetch('/api/class-fee-overrides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: ruleClassId, monthly_fee: fee })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast('success', 'Class billing rule saved. New monthly bills for this class will use this amount.');
+        setShowAddFeeRuleForm(false);
+        setRuleClassId('');
+        setRuleMonthlyFee('');
+        onRefresh();
+      } else {
+        addToast('error', data.error || 'Failed to save billing rule.');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('error', 'Failed to save billing rule.');
+    } finally {
+      setSavingFeeRule(false);
+    }
+  };
+
+  const handleDeleteClassFeeRule = async (id: string) => {
+    if (!confirm('Remove this class billing rule? The class will fall back to the standard fee.')) return;
+    try {
+      const res = await fetch(`/api/class-fee-overrides/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        addToast('success', 'Billing rule removed.');
+        onRefresh();
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('error', 'Failed to remove billing rule.');
+    }
+  };
+
   const handleSaveBranding = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -551,7 +607,10 @@ export default function SettingsView({ db, schoolBranding, onUpdateBranding, onR
                 Complete these initial steps to fully configure your school management system.
               </p>
             </div>
-            <button className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm rounded-lg shadow-sm transition-colors cursor-pointer">
+            <button
+              onClick={() => setCurrentSubTab('Classes')}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
               Launch Setup Wizard
             </button>
           </div>
@@ -1191,18 +1250,94 @@ export default function SettingsView({ db, schoolBranding, onUpdateBranding, onR
             <div>
               <h3 className="font-bold text-gray-900 text-base">Class Specific Billing Overrides</h3>
               <p className="text-xs text-gray-400 mt-0.5">
-                Define unique billing schedules or specific charges for individual classes.
+                Define a custom monthly tuition fee for a specific class. Classes without a rule use the standard Rs. 2,500 default (or a student's individual manual fee, if set).
               </p>
             </div>
-            <button className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium text-xs rounded-md transition-colors cursor-pointer flex items-center gap-1.5">
+            <button
+              onClick={() => setShowAddFeeRuleForm(v => !v)}
+              className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium text-xs rounded-md transition-colors cursor-pointer flex items-center gap-1.5"
+            >
               <Plus className="h-3.5 w-3.5" />
               Add Custom Rule
             </button>
           </div>
 
-          <div className="p-10 text-center text-gray-400 text-xs border-2 border-dashed border-gray-100 rounded-xl">
-            No custom class billing rules defined. All classes are using standard Fee Policy rates.
-          </div>
+          {showAddFeeRuleForm && (
+            <div className="mb-6 p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Class</label>
+                <select
+                  value={ruleClassId}
+                  onChange={e => setRuleClassId(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-48"
+                >
+                  <option value="">Select a class</option>
+                  {db.classes.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Monthly Fee (Rs.)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={ruleMonthlyFee}
+                  onChange={e => setRuleMonthlyFee(e.target.value)}
+                  placeholder="e.g. 3000"
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-36"
+                />
+              </div>
+              <button
+                onClick={handleAddClassFeeRule}
+                disabled={savingFeeRule}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 cursor-pointer"
+              >
+                {savingFeeRule ? 'Saving...' : 'Save Rule'}
+              </button>
+              <button
+                onClick={() => setShowAddFeeRuleForm(false)}
+                className="px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {(!db.class_fee_overrides || db.class_fee_overrides.length === 0) ? (
+            <div className="p-10 text-center text-gray-400 text-xs border-2 border-dashed border-gray-100 rounded-xl">
+              No custom class billing rules defined. All classes are using standard Fee Policy rates.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                  <th className="pb-2">Class</th>
+                  <th className="pb-2">Monthly Fee</th>
+                  <th className="pb-2 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {db.class_fee_overrides.map(rule => {
+                  const cls = db.classes.find(c => c.id === rule.class_id);
+                  return (
+                    <tr key={rule.id} className="border-b border-gray-50">
+                      <td className="py-3 font-medium text-gray-800">{cls?.name || rule.class_id}</td>
+                      <td className="py-3 font-mono text-gray-700">Rs. {rule.monthly_fee.toLocaleString()}</td>
+                      <td className="py-3 text-right">
+                        <button
+                          onClick={() => handleDeleteClassFeeRule(rule.id)}
+                          className="text-red-500 hover:text-red-700 cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4 inline" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </motion.div>
       )}
 

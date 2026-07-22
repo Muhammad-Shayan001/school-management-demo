@@ -6,43 +6,18 @@
 import express from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
+import cookieParser from 'cookie-parser';
 import { GoogleGenAI } from '@google/genai';
-import bcrypt from 'bcryptjs';
-import rateLimit from 'express-rate-limit';
-import { pool } from './src/db.js';
-import { pullDataFromSupabase } from './src/supabaseClient.js';
-import {
-  pgUpsertSchool, pgUpsertAdminUser, pgUpsertSession,
-  pgUpsertClass, pgDeleteClass,
-  pgUpsertSection, pgDeleteSection,
-  pgUpsertSubject, pgDeleteSubject,
-  pgUpsertClassSubject, pgDeleteClassSubject,
-  pgUpsertStudent, pgDeleteStudent,
-  pgUpsertFamily, pgDeleteFamily,
-  pgUpsertStaff, pgDeleteStaff,
-  pgUpsertStaffAssignment,
-  pgUpsertExam, pgDeleteExam,
-  pgUpsertExamAssignment,
-  pgUpsertExamResult,
-  pgUpsertFeeHead,
-  pgUpsertPayment,
-  pgUpsertAttendance,
-  pgUpsertStaffAttendance,
-  pgUpsertExpense, pgDeleteExpense,
-  pgUpsertIncome, pgDeleteIncome,
-  pgUpsertLedgerEntry,
-  pgUpsertBadDebt,
-  pgUpsertStationery, pgDeleteStationery,
-  pgUpsertInventory, pgDeleteInventory,
-  pgUpsertCalendarDay
-} from './src/syncToPostgres.js';
 import {
   readDatabase,
   writeDatabase,
   ensureDatabaseExists,
   fillDummyData,
   clearAllData,
-  postToLedger
+  postToLedger,
+  hashPassword,
+  verifyPassword
 } from './src/dbStore.js';
 import {
   School,
@@ -75,292 +50,94 @@ import {
 const PORT = 3000;
 const app = express();
 
-// Middleware to parse json requests
+// Middleware to parse json requests + cookies
 app.use(express.json());
+app.use(cookieParser());
 
 // Initialize database at startup
 ensureDatabaseExists();
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 login requests per windowMs
-  message: { error: 'Too many login attempts from this IP, please try again after 15 minutes' }
-});
+// -----------------------------------------------------------------------------
+// AUTHENTICATION — in-memory session store
+// -----------------------------------------------------------------------------
+// Every logged-in admin gets a random, unguessable session token stored server
+// side and mirrored to an httpOnly cookie. All /api/* routes (except /api/login)
+// require a valid, non-expired session. Because the cookie is httpOnly and this
+// app serves frontend + API from the same origin, the browser attaches it to
+// every fetch() automatically — no frontend changes needed.
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const sessions = new Map<string, { adminId: string; schoolId: string; expiresAt: number }>();
 
-app.post('/api/login', loginLimiter, async (req, res) => {
+function createSession(adminId: string, schoolId: string): string {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, { adminId, schoolId, expiresAt: Date.now() + SESSION_TTL_MS });
+  return token;
+}
+
+function destroySession(token: string | undefined) {
+  if (token) sessions.delete(token);
+}
+
+function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const token = req.cookies?.rs_session;
+  const session = token ? sessions.get(token) : undefined;
+
+  if (!session || session.expiresAt < Date.now()) {
+    if (token) sessions.delete(token);
+    return res.status(401).json({ error: 'Not authenticated. Please log in again.' });
+  }
+
+  // Sliding expiry — keep the admin logged in while active
+  session.expiresAt = Date.now() + SESSION_TTL_MS;
+  (req as any).adminId = session.adminId;
+  (req as any).schoolId = session.schoolId;
+  next();
+}
+
+app.post('/api/login', (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email/Login ID and password are required.' });
+      return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     const db = readDatabase();
-    const loginStr = String(email).toLowerCase();
-
-    // 1. Check Admin
-    const adminUser = db.admin_users.find(user => user.email.toLowerCase() === loginStr);
-    if (adminUser) {
-      let isValid = await bcrypt.compare(password, adminUser.password_hash);
-      if (!isValid && adminUser.password_hash === password) isValid = true; // Fallback
-      if (isValid) {
-        return res.json({
-          status: 'success',
-          user: { id: adminUser.id, name: adminUser.name, email: adminUser.email, school_id: adminUser.school_id, role: 'admin' },
-          school: db.schools.find(s => s.id === adminUser.school_id) || db.schools[0] || null,
-        });
-      }
+    const adminUser = db.admin_users.find(user => user.email.toLowerCase() === String(email).toLowerCase());
+    if (!adminUser || !verifyPassword(String(password), adminUser.password_hash)) {
+      return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
-    // 2. Check Staff
-    const staffUser = db.staff.find(user => user.login_id?.toLowerCase() === loginStr);
-    if (staffUser) {
-      let isValid = await bcrypt.compare(password, staffUser.password_hash);
-      if (!isValid && staffUser.password_hash === password) isValid = true;
-      if (isValid) {
-        if (staffUser.status === 'pending') {
-          return res.status(403).json({ error: 'Your account is pending admin approval.' });
-        }
-        return res.json({
-          status: 'success',
-          user: { id: staffUser.id, name: staffUser.name, email: staffUser.login_id, school_id: staffUser.school_id, role: 'staff' },
-          school: db.schools.find(s => s.id === staffUser.school_id) || db.schools[0] || null,
-        });
-      }
-    }
+    const token = createSession(adminUser.id, adminUser.school_id);
+    res.cookie('rs_session', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: SESSION_TTL_MS,
+    });
 
-    // 3. Check Student
-    const studentUser = db.students.find(user => user.login_id?.toLowerCase() === loginStr);
-    if (studentUser) {
-      let isValid = await bcrypt.compare(password, studentUser.password_hash);
-      if (!isValid && studentUser.password_hash === password) isValid = true;
-      if (isValid) {
-        if (studentUser.status === 'pending') {
-          return res.status(403).json({ error: 'Your account is pending admin approval.' });
-        }
-        return res.json({
-          status: 'success',
-          user: { id: studentUser.id, name: studentUser.name, email: studentUser.login_id, school_id: studentUser.school_id, role: 'student' },
-          school: db.schools.find(s => s.id === studentUser.school_id) || db.schools[0] || null,
-        });
-      }
-    }
-
-    return res.status(401).json({ error: 'Invalid credentials.' });
+    const school = db.schools.find(s => s.id === adminUser.school_id) || db.schools[0] || null;
+    return res.json({
+      status: 'success',
+      user: {
+        id: adminUser.id,
+        name: adminUser.name,
+        email: adminUser.email,
+        school_id: adminUser.school_id,
+      },
+      school,
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Login failed.' });
   }
 });
 
-app.post('/api/signup', async (req, res) => {
-  try {
-    const { role, name, login_id, password, contact, gender } = req.body;
-    if (!role || !name || !login_id || !password) {
-      return res.status(400).json({ error: 'Missing required fields.' });
-    }
-
-    const db = readDatabase();
-    const school = getActiveSchool(db);
-    
-    // Check if login_id already exists
-    if (
-      db.admin_users.some(u => u.email.toLowerCase() === login_id.toLowerCase()) ||
-      db.staff.some(s => s.login_id?.toLowerCase() === login_id.toLowerCase()) ||
-      db.students.some(s => s.login_id?.toLowerCase() === login_id.toLowerCase())
-    ) {
-      return res.status(400).json({ error: 'Login ID is already taken.' });
-    }
-
-    const password_hash = await bcrypt.hash(password, 10);
-    const newId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-    if (role === 'staff') {
-      const newStaff = {
-        id: newId,
-        school_id: school.id,
-        employee_id: `EMP-REQ-${Date.now().toString().slice(-4)}`,
-        login_id,
-        password_hash,
-        name,
-        father_name: '',
-        cnic: '',
-        contact: contact || '',
-        gender: gender || 'other',
-        dob: '',
-        joining_date: new Date().toISOString().split('T')[0],
-        salary: 0,
-        qualification: '',
-        address: '',
-        status: 'pending' as const
-      };
-      db.staff.push(newStaff);
-      writeDatabase(db);
-      await pgUpsertStaff(newStaff);
-    } else if (role === 'student') {
-      const newStudent = {
-        id: newId,
-        school_id: school.id,
-        reg_no: `RS-REQ-${Date.now().toString().slice(-4)}`,
-        login_id,
-        password_hash,
-        name,
-        father_name: '',
-        gender: gender || 'other',
-        dob: '',
-        contact: contact || '',
-        alt_phone: '',
-        address: '',
-        emergency_contact: '',
-        guardian_name: '',
-        guardian_contact: '',
-        class_id: '',
-        section_id: '',
-        admission_date: new Date().toISOString().split('T')[0],
-        billing_mode: 'individual' as const,
-        family_id: 'fam_none',
-        manual_monthly_fee: 0,
-        status: 'pending' as const
-      };
-      db.students.push(newStudent);
-      writeDatabase(db);
-      await pgUpsertStudent(newStudent);
-    } else {
-      return res.status(400).json({ error: 'Invalid role.' });
-    }
-
-    return res.json({ status: 'success', message: 'Account created successfully and is pending admin approval.' });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Signup failed.' });
-  }
-});
-
-app.post('/api/approve-user', async (req, res) => {
-  try {
-    const { id, type, action } = req.body; // type = 'staff' | 'student', action = 'approve' | 'reject'
-    if (!id || !type || !action) return res.status(400).json({ error: 'Missing parameters.' });
-
-    const db = readDatabase();
-    
-    if (type === 'staff') {
-      const idx = db.staff.findIndex(s => s.id === id);
-      if (idx === -1) return res.status(404).json({ error: 'Staff not found.' });
-      if (action === 'approve') {
-        db.staff[idx].status = 'active';
-        writeDatabase(db);
-        await pgUpsertStaff(db.staff[idx]);
-      } else if (action === 'reject') {
-        db.staff.splice(idx, 1);
-        writeDatabase(db);
-        await pgDeleteStaff(id);
-      }
-    } else if (type === 'student') {
-      const idx = db.students.findIndex(s => s.id === id);
-      if (idx === -1) return res.status(404).json({ error: 'Student not found.' });
-      if (action === 'approve') {
-        db.students[idx].status = 'active';
-        writeDatabase(db);
-        await pgUpsertStudent(db.students[idx]);
-      } else if (action === 'reject') {
-        db.students.splice(idx, 1);
-        writeDatabase(db);
-        await pgDeleteStudent(id);
-      }
-    }
-
-    return res.json({ status: 'success' });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Action failed.' });
-  }
-});
-
-app.post('/api/assignments', async (req, res) => {
-  try {
-    const { class_id, subject_id, teacher_id, title, description, due_date } = req.body;
-    if (!class_id || !subject_id || !title) return res.status(400).json({ error: 'Missing required fields.' });
-
-    const db = readDatabase();
-    const school = getActiveSchool(db);
-    const newAssignment = {
-      id: `assgn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      school_id: school.id,
-      class_id,
-      subject_id,
-      teacher_id,
-      title,
-      description: description || '',
-      due_date: due_date || '',
-      created_at: new Date().toISOString()
-    };
-    db.assignments.push(newAssignment);
-    writeDatabase(db);
-    return res.json({ status: 'success', data: newAssignment });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Failed to create assignment.' });
-  }
-});
-
-app.post('/api/assignments/submit', async (req, res) => {
-  try {
-    const { assignment_id, student_id, content } = req.body;
-    if (!assignment_id || !student_id || !content) return res.status(400).json({ error: 'Missing required fields.' });
-
-    const db = readDatabase();
-    const existing = db.assignment_submissions.findIndex(s => s.assignment_id === assignment_id && s.student_id === student_id);
-    
-    if (existing >= 0) {
-      db.assignment_submissions[existing].content = content;
-      db.assignment_submissions[existing].submitted_at = new Date().toISOString();
-    } else {
-      const newSubmission = {
-        id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        assignment_id,
-        student_id,
-        content,
-        submitted_at: new Date().toISOString()
-      };
-      db.assignment_submissions.push(newSubmission);
-    }
-    
-    writeDatabase(db);
-    return res.json({ status: 'success' });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Failed to submit assignment.' });
-  }
-});
-
-app.post('/api/profile/update', async (req, res) => {
-  const db = readDatabase();
-  const { id, role, image_url, contact, blood_group, address, password } = req.body;
-  if (!id || !role) return res.status(400).json({ error: 'ID and Role are required' });
-
-  let user: any;
-  if (role === 'student') {
-    user = db.students.find(s => s.id === id);
-  } else {
-    user = db.staff.find(s => s.id === id);
-  }
-
-  if (!user) return res.status(404).json({ error: 'User not found' });
-
-  if (image_url !== undefined) user.image_url = image_url;
-  if (contact !== undefined) {
-    user.contact = contact;
-    user.emergency_contact = contact;
-  }
-  if (blood_group !== undefined) user.blood_group = blood_group;
-  if (address !== undefined) user.address = address;
-  
-  if (password) {
-    user.password_hash = await bcrypt.hash(password, 10);
-  }
-
-  await writeDatabase(db);
-  // Optional: Add specific pgUpsert here if implemented, for now memory+file handles it via ensureDatabaseExists style syncs.
-  res.json({ status: 'success', user });
-});
-
-app.post('/api/logout', async (req, res) => {
+app.post('/api/logout', (req, res) => {
+  destroySession(req.cookies?.rs_session);
+  res.clearCookie('rs_session');
   res.json({ status: 'success', message: 'Logged out successfully.' });
 });
+
+// Every route registered AFTER this line requires a valid session.
+app.use('/api', requireAuth);
 
 // Helper to get active school (multi-tenant ready, defaulting to first school)
 function getActiveSchool(db: any): School {
@@ -500,56 +277,17 @@ function generateDefaultRoadmap(totalPending: number, studentCount: number, attR
 // -----------------------------------------------------------------------------
 // CORE SYSTEM CONFIG / GENERAL GET ENDPOINT
 // -----------------------------------------------------------------------------
-app.get('/api/db', async (req, res) => {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL || '';
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
-
-    // Always start with seeded in-memory data as the guaranteed base
-    const seededDb = readDatabase();
-
-    if (!supabaseUrl || !supabaseKey) {
-      return res.json(seededDb);
-    }
-
-    const { success, data, error } = await pullDataFromSupabase(supabaseUrl, supabaseKey);
-
-    if (!success || !data) {
-      console.error('Supabase pull failed, using seeded in-memory data:', error);
-      return res.json(seededDb);
-    }
-
-    // Merge: use Supabase data but fall back to seeded data for core structural
-    // tables (classes, sections, subjects) if Supabase returns them empty.
-    // This ensures the UI always has data to work with even on a fresh Supabase DB.
-    const merged = {
-      ...seededDb,
-      ...data,
-      classes: (data.classes && data.classes.length > 0) ? data.classes : seededDb.classes,
-      sections: (data.sections && data.sections.length > 0) ? data.sections : seededDb.sections,
-      subjects: (data.subjects && data.subjects.length > 0) ? data.subjects : seededDb.subjects,
-      class_subjects: (data.class_subjects && data.class_subjects.length > 0) ? data.class_subjects : seededDb.class_subjects,
-      sessions: (data.sessions && data.sessions.length > 0) ? data.sessions : seededDb.sessions,
-      schools: (data.schools && data.schools.length > 0) ? data.schools : seededDb.schools,
-      // Always merge assignments (new tables not yet in Supabase schema)
-      assignments: seededDb.assignments || [],
-      assignment_submissions: seededDb.assignment_submissions || [],
-    };
-
-    return res.json(merged);
-  } catch (err) {
-    console.error('Supabase connection failed, falling back to in-memory dbStore:', err);
-    return res.json(readDatabase());
-  }
+app.get('/api/db', (req, res) => {
+  res.json(readDatabase());
 });
 
-app.post('/api/db/overwrite', async (req, res) => {
+app.post('/api/db/overwrite', (req, res) => {
   try {
     const newDb = req.body;
     if (!newDb || typeof newDb !== 'object') {
       return res.status(400).json({ error: 'Invalid database payload' });
     }
-    await writeDatabase(newDb);
+    writeDatabase(newDb);
     res.json({ status: 'success', message: 'Database overwritten successfully' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -561,24 +299,24 @@ app.get('/api/school-branding', (req, res) => {
   res.json(getActiveSchool(db));
 });
 
-app.put('/api/school-branding', async (req, res) => {
+app.put('/api/school-branding', (req, res) => {
   const db = readDatabase();
   const index = db.schools.findIndex(s => s.id === 'school_1');
   if (index !== -1) {
     db.schools[index] = { ...db.schools[index], ...req.body };
-    await writeDatabase(db);
+    writeDatabase(db);
     res.json({ status: 'success', school: db.schools[index] });
   } else {
     res.status(404).json({ error: 'School not found' });
   }
 });
 
-app.post('/api/dummy-data', async (req, res) => {
+app.post('/api/dummy-data', (req, res) => {
   fillDummyData();
   res.json({ status: 'success', message: 'Demo data filled successfully!' });
 });
 
-app.post('/api/erase-all', async (req, res) => {
+app.post('/api/erase-all', (req, res) => {
   clearAllData();
   res.json({ status: 'success', message: 'Database cleared completely.' });
 });
@@ -616,7 +354,7 @@ app.get('/api/backups/snapshots', (req, res) => {
   }
 });
 
-app.post('/api/backups/snapshots', async (req, res) => {
+app.post('/api/backups/snapshots', (req, res) => {
   try {
     ensureSnapshotsDirExists();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -640,7 +378,7 @@ app.post('/api/backups/snapshots', async (req, res) => {
   }
 });
 
-app.post('/api/backups/snapshots/restore', async (req, res) => {
+app.post('/api/backups/snapshots/restore', (req, res) => {
   try {
     ensureSnapshotsDirExists();
     const { filename } = req.body;
@@ -655,8 +393,9 @@ app.post('/api/backups/snapshots/restore', async (req, res) => {
     // Create an automatic pre-restore backup just in case!
     const preRestoreFilename = `pre_restore_backup_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     fs.writeFileSync(path.join(SNAPSHOTS_DIR, preRestoreFilename), JSON.stringify(readDatabase(), null, 2), 'utf-8');
+    
     const snapshotData = JSON.parse(fs.readFileSync(sourcePath, 'utf-8'));
-    await writeDatabase(snapshotData);
+    writeDatabase(snapshotData);
     
     res.json({ status: 'success', message: 'Database successfully restored from snapshot!' });
   } catch (error: any) {
@@ -664,7 +403,7 @@ app.post('/api/backups/snapshots/restore', async (req, res) => {
   }
 });
 
-app.delete('/api/backups/snapshots/:filename', async (req, res) => {
+app.delete('/api/backups/snapshots/:filename', (req, res) => {
   try {
     ensureSnapshotsDirExists();
     const filename = req.params.filename;
@@ -686,7 +425,7 @@ app.get('/api/classes', (req, res) => {
   res.json(readDatabase().classes);
 });
 
-app.post('/api/classes', async (req, res) => {
+app.post('/api/classes', (req, res) => {
   const db = readDatabase();
   const newClass: Class = {
     id: `class_${Date.now()}`,
@@ -694,19 +433,17 @@ app.post('/api/classes', async (req, res) => {
     name: req.body.name
   };
   db.classes.push(newClass);
-  await writeDatabase(db);
-  await pgUpsertClass(newClass);
+  writeDatabase(db);
   res.json({ status: 'success', class: newClass });
 });
 
-app.delete('/api/classes/:id', async (req, res) => {
+app.delete('/api/classes/:id', (req, res) => {
   const db = readDatabase();
   db.classes = db.classes.filter(c => c.id !== req.params.id);
   // clean up sections/subjects mapping
   db.sections = db.sections.filter(s => s.class_id !== req.params.id);
   db.class_subjects = db.class_subjects.filter(cs => cs.class_id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteClass(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -714,7 +451,7 @@ app.get('/api/sections', (req, res) => {
   res.json(readDatabase().sections);
 });
 
-app.post('/api/sections', async (req, res) => {
+app.post('/api/sections', (req, res) => {
   const db = readDatabase();
   const newSection: Section = {
     id: `sec_${Date.now()}`,
@@ -722,16 +459,14 @@ app.post('/api/sections', async (req, res) => {
     name: req.body.name
   };
   db.sections.push(newSection);
-  await writeDatabase(db);
-  await pgUpsertSection(newSection);
+  writeDatabase(db);
   res.json({ status: 'success', section: newSection });
 });
 
-app.delete('/api/sections/:id', async (req, res) => {
+app.delete('/api/sections/:id', (req, res) => {
   const db = readDatabase();
   db.sections = db.sections.filter(s => s.id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteSection(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -739,7 +474,7 @@ app.get('/api/subjects', (req, res) => {
   res.json(readDatabase().subjects);
 });
 
-app.post('/api/subjects', async (req, res) => {
+app.post('/api/subjects', (req, res) => {
   const db = readDatabase();
   const newSubj: Subject = {
     id: `subj_${Date.now()}`,
@@ -747,17 +482,15 @@ app.post('/api/subjects', async (req, res) => {
     name: req.body.name
   };
   db.subjects.push(newSubj);
-  await writeDatabase(db);
-  await pgUpsertSubject(newSubj);
+  writeDatabase(db);
   res.json({ status: 'success', subject: newSubj });
 });
 
-app.delete('/api/subjects/:id', async (req, res) => {
+app.delete('/api/subjects/:id', (req, res) => {
   const db = readDatabase();
   db.subjects = db.subjects.filter(s => s.id !== req.params.id);
   db.class_subjects = db.class_subjects.filter(cs => cs.subject_id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteSubject(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -765,7 +498,7 @@ app.get('/api/class-subjects', (req, res) => {
   res.json(readDatabase().class_subjects);
 });
 
-app.post('/api/class-subjects', async (req, res) => {
+app.post('/api/class-subjects', (req, res) => {
   const db = readDatabase();
   const { class_id, subject_ids } = req.body;
   
@@ -779,11 +512,7 @@ app.post('/api/class-subjects', async (req, res) => {
     });
   }
   
-  await writeDatabase(db);
-  // Sync new class-subject mappings to Postgres
-  for (const sid of (Array.isArray(subject_ids) ? subject_ids : [])) {
-    await pgUpsertClassSubject(class_id, sid);
-  }
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -794,7 +523,7 @@ app.get('/api/sessions', (req, res) => {
   res.json(readDatabase().sessions);
 });
 
-app.post('/api/sessions', async (req, res) => {
+app.post('/api/sessions', (req, res) => {
   const db = readDatabase();
   const newSession: Session = {
     id: `session_${Date.now()}`,
@@ -809,8 +538,7 @@ app.post('/api/sessions', async (req, res) => {
     db.sessions.forEach(s => s.is_active = false);
   }
   db.sessions.push(newSession);
-  await writeDatabase(db);
-  await pgUpsertSession(newSession);
+  writeDatabase(db);
   res.json({ status: 'success', session: newSession });
 });
 
@@ -821,22 +549,19 @@ app.get('/api/students', (req, res) => {
   res.json(readDatabase().students);
 });
 
-app.post('/api/students', async (req, res) => {
+app.post('/api/students', (req, res) => {
   const db = readDatabase();
   const regNoSuffix = String(db.students.length + 1).padStart(4, '0');
   const year = new Date().getFullYear();
   const reg_no = `RS-${year}-${regNoSuffix}`;
 
-  const defaultPassword = req.body.password || Math.random().toString(36).slice(-6);
-  const passwordHash = await bcrypt.hash(defaultPassword, 10);
-  const login_id = req.body.email ? String(req.body.email).toLowerCase() : (req.body.name.toLowerCase().replace(/\s+/g, '_') + '_' + regNoSuffix);
-
+  const defaultPassword = crypto.randomBytes(6).toString('hex'); // shown once in the response below
   const newStudent: Student = {
     id: `stud_${Date.now()}`,
     school_id: 'school_1',
     reg_no,
-    login_id,
-    password_hash: passwordHash,
+    login_id: req.body.name.toLowerCase().replace(/\s+/g, '_') + '_' + regNoSuffix,
+    password_hash: hashPassword(defaultPassword),
     name: req.body.name,
     father_name: req.body.father_name,
     gender: req.body.gender || 'male',
@@ -853,30 +578,29 @@ app.post('/api/students', async (req, res) => {
     billing_mode: req.body.billing_mode || 'individual',
     family_id: req.body.family_id || '',
     manual_monthly_fee: Number(req.body.manual_monthly_fee) || 0,
-    status: req.body.status || 'active',
-    image_url: req.body.image_url || ''
+    status: req.body.status || 'active'
   };
 
   db.students.push(newStudent);
 
-  // Auto-generate standard starting fees for this child
-  // Expected monthly fee logic: use class-configured fee unless custom override is set
-  const classObj = db.classes.find(c => c.id === newStudent.class_id);
-  const classDefaultFee = classObj?.name.includes('8') ? 3500 : 2500; // Mock fee rules per class
-  const tuitionFee = newStudent.manual_monthly_fee > 0 ? newStudent.manual_monthly_fee : classDefaultFee;
+  // Auto-generate standard starting fees for this child using the same
+  // class-fee-override resolution as bulk billing (Student override > Class
+  // rule > flat default), and the real current month instead of a hardcoded date.
+  const tuitionFee = getClassDefaultFee(db, newStudent.class_id, newStudent.manual_monthly_fee);
+  const { periodLabel, chargeDate, dueDate } = getMonthlyPeriodInfo();
 
   // Monthly Tuition Fee
   const monthlyFee: FeeHead = {
     id: `fh_${Date.now()}_1`,
     student_id: newStudent.id,
     type: 'monthly',
-    title: 'Current Month Fee (April 2026)',
-    period_label: 'April 2026',
+    title: `Current Month Fee (${periodLabel})`,
+    period_label: periodLabel,
     configured_amount: tuitionFee,
     expected_amount: tuitionFee,
     pending_amount: tuitionFee,
-    charge_date: '2026-04-01',
-    due_date: '2026-04-10',
+    charge_date: chargeDate,
+    due_date: dueDate,
     status: 'PENDING'
   };
 
@@ -887,42 +611,40 @@ app.post('/api/students', async (req, res) => {
     student_id: newStudent.id,
     type: 'one_time',
     title: 'Admission Fee Due',
-    period_label: 'March 2026',
+    period_label: periodLabel,
     configured_amount: admissionFeeAmount,
     expected_amount: admissionFeeAmount,
     pending_amount: admissionFeeAmount,
     charge_date: newStudent.admission_date,
-    due_date: '2026-04-10',
+    due_date: dueDate,
     status: 'PENDING'
   };
 
   db.fee_heads.push(monthlyFee, admissionFee);
-  await writeDatabase(db);
-  await pgUpsertStudent(newStudent);
-  await pgUpsertFeeHead(monthlyFee);
-  await pgUpsertFeeHead(admissionFee);
-  res.json({ status: 'success', student: newStudent });
+
+  writeDatabase(db);
+  // default_password is only ever returned here, once, right after creation —
+  // it is never stored in plain text and never returned by any other endpoint.
+  res.json({ status: 'success', student: newStudent, default_password: defaultPassword });
 });
 
-app.put('/api/students/:id', async (req, res) => {
+app.put('/api/students/:id', (req, res) => {
   const db = readDatabase();
   const idx = db.students.findIndex(s => s.id === req.params.id);
   if (idx !== -1) {
     db.students[idx] = { ...db.students[idx], ...req.body };
-    await writeDatabase(db);
-    await pgUpsertStudent(db.students[idx]);
+    writeDatabase(db);
     res.json({ status: 'success', student: db.students[idx] });
   } else {
     res.status(404).json({ error: 'Student not found' });
   }
 });
 
-app.delete('/api/students/:id', async (req, res) => {
+app.delete('/api/students/:id', (req, res) => {
   const db = readDatabase();
   db.students = db.students.filter(s => s.id !== req.params.id);
   db.fee_heads = db.fee_heads.filter(fh => fh.student_id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteStudent(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -933,7 +655,7 @@ app.get('/api/families', (req, res) => {
   res.json(readDatabase().families);
 });
 
-app.post('/api/families', async (req, res) => {
+app.post('/api/families', (req, res) => {
   const db = readDatabase();
   const randomSuffix = String(Math.floor(10000000 + Math.random() * 90000000));
   const family_key = req.body.guardian_contact ? `FAM-${req.body.guardian_contact}` : `FAM-${randomSuffix}`;
@@ -949,12 +671,11 @@ app.post('/api/families', async (req, res) => {
   };
 
   db.families.push(newFamily);
-  await writeDatabase(db);
-  await pgUpsertFamily(newFamily);
+  writeDatabase(db);
   res.json({ status: 'success', family: newFamily });
 });
 
-app.delete('/api/families/:id', async (req, res) => {
+app.delete('/api/families/:id', (req, res) => {
   const db = readDatabase();
   db.families = db.families.filter(f => f.id !== req.params.id);
   // Unlink students in family mode
@@ -964,8 +685,7 @@ app.delete('/api/families/:id', async (req, res) => {
       s.billing_mode = 'individual';
     }
   });
-  await writeDatabase(db);
-  await pgDeleteFamily(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -976,19 +696,18 @@ app.get('/api/staff', (req, res) => {
   res.json(readDatabase().staff);
 });
 
-app.post('/api/staff', async (req, res) => {
+app.post('/api/staff', (req, res) => {
   const db = readDatabase();
   const suffix = String(db.staff.length + 1).padStart(4, '0');
   const employee_id = `EMP-2026-${suffix}`;
-  
-  const passwordHash = await bcrypt.hash('staff123', 10);
+  const defaultPassword = crypto.randomBytes(6).toString('hex'); // shown once in the response below
 
   const newStaff: Staff = {
     id: `staff_${Date.now()}`,
     school_id: 'school_1',
     employee_id,
     login_id: req.body.name.toLowerCase().replace(/\s+/g, '_') + '_' + suffix,
-    password_hash: passwordHash,
+    password_hash: hashPassword(defaultPassword),
     name: req.body.name,
     father_name: req.body.father_name,
     cnic: req.body.cnic,
@@ -1003,16 +722,14 @@ app.post('/api/staff', async (req, res) => {
   };
 
   db.staff.push(newStaff);
-  await writeDatabase(db);
-  await pgUpsertStaff(newStaff);
-  res.json({ status: 'success', staff: newStaff });
+  writeDatabase(db);
+  res.json({ status: 'success', staff: newStaff, default_password: defaultPassword });
 });
 
-app.delete('/api/staff/:id', async (req, res) => {
+app.delete('/api/staff/:id', (req, res) => {
   const db = readDatabase();
   db.staff = db.staff.filter(s => s.id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteStaff(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -1020,7 +737,7 @@ app.get('/api/staff-assignments', (req, res) => {
   res.json(readDatabase().staff_assignments);
 });
 
-app.post('/api/staff-assignments', async (req, res) => {
+app.post('/api/staff-assignments', (req, res) => {
   const db = readDatabase();
   const { staff_id, class_id, subject_id } = req.body;
   
@@ -1030,8 +747,7 @@ app.post('/api/staff-assignments', async (req, res) => {
   );
 
   db.staff_assignments.push({ staff_id, class_id, subject_id });
-  await writeDatabase(db);
-  await pgUpsertStaffAssignment(staff_id, class_id, subject_id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -1042,7 +758,7 @@ app.get('/api/attendance', (req, res) => {
   res.json(readDatabase().attendance);
 });
 
-app.post('/api/attendance', async (req, res) => {
+app.post('/api/attendance', (req, res) => {
   const db = readDatabase();
   const { class_id, date, records } = req.body; // records is array of { student_id, status }
 
@@ -1070,107 +786,24 @@ app.post('/api/attendance', async (req, res) => {
     });
   });
 
-  await writeDatabase(db);
-  for (const rec of db.attendance.filter(a => a.class_id === class_id && a.date === date)) {
-    await pgUpsertAttendance(rec);
-  }
+  writeDatabase(db);
   res.json({ status: 'success', message: 'Student attendance saved successfully!' });
 });
 
-// Bulk attendance endpoint for Teacher Portal
-app.post('/api/attendance/bulk', async (req, res) => {
-  const db = readDatabase();
-  const { records } = req.body; // records: [{ student_id, class_id, date, status }]
-
-  if (!records || !Array.isArray(records)) {
-    return res.status(400).json({ error: 'Records must be an array.' });
-  }
-
-  // Group by class+date to clear existing then insert
-  const keys = new Set(records.map((r: any) => `${r.class_id}|${r.date}`));
-  keys.forEach(key => {
-    const [cid, dt] = (key as string).split('|');
-    db.attendance = db.attendance.filter(a => !(a.class_id === cid && a.date === dt));
-  });
-
-  records.forEach((rec: any) => {
-    db.attendance.push({
-      id: `att_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
-      student_id: rec.student_id,
-      class_id: rec.class_id,
-      date: rec.date,
-      status: rec.status || 'absent'
-    });
-  });
-
-  await writeDatabase(db);
-  res.json({ status: 'success', count: records.length });
-});
-
-// Exam results POST endpoint for Teacher Portal
-app.post('/api/exam-results', async (req, res) => {
-  const db = readDatabase();
-  const { exam_id, student_id, subject_id, marks_obtained, marks_total } = req.body;
-
-  if (!exam_id || !student_id || !subject_id) {
-    return res.status(400).json({ error: 'exam_id, student_id, subject_id are required.' });
-  }
-
-  // Remove existing result for this combination
-  if (!db.exam_results) db.exam_results = [];
-  db.exam_results = db.exam_results.filter(
-    r => !(r.exam_id === exam_id && r.student_id === student_id && r.subject_id === subject_id)
-  );
-
-  const newResult = {
-    id: `res_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-    exam_id,
-    student_id,
-    subject_id,
-    marks_obtained: Number(marks_obtained) || 0,
-    marks_total: Number(marks_total) || 100
-  };
-
-  db.exam_results.push(newResult);
-  await writeDatabase(db);
-  try { await pgUpsertExamResult(newResult); } catch (_) { /* ok */ }
-  res.json({ status: 'success', data: newResult });
-});
-
-
-
-app.post('/api/attendance/scan', async (req, res) => {
+app.post('/api/attendance/scan', (req, res) => {
   try {
     const db = readDatabase();
     const { reg_no, date, status } = req.body;
     
     if (!reg_no) {
-      return res.status(400).json({ error: 'QR Code data (reg_no or id_card_no) is required.' });
+      return res.status(400).json({ error: 'Registration number is required.' });
     }
     
     const targetDate = date || new Date().toISOString().split('T')[0];
-    const searchTerm = reg_no.trim().toLowerCase();
     
-    let userRole = 'student';
-    let user = db.students.find(s => 
-      (s.id_card_no && s.id_card_no.toLowerCase() === searchTerm) || 
-      (s.reg_no.toLowerCase() === searchTerm)
-    ) as any;
-
-    if (!user) {
-      // Try finding staff
-      user = db.staff.find(s => 
-        (s.id_card_no && s.id_card_no.toLowerCase() === searchTerm) ||
-        (s.employee_id.toLowerCase() === searchTerm)
-      );
-      if (user) userRole = 'staff';
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: `User with ID "${reg_no}" not found.` });
-    }
-    if (user.status !== 'active') {
-      return res.status(400).json({ error: `User account is not active.` });
+    const student = db.students.find(s => s.reg_no.trim().toLowerCase() === reg_no.trim().toLowerCase() && s.status === 'active');
+    if (!student) {
+      return res.status(404).json({ error: `Active student with registration number "${reg_no}" not found.` });
     }
     
     // Check if calendar day exists and is a working day
@@ -1179,36 +812,20 @@ app.post('/api/attendance/scan', async (req, res) => {
       return res.status(400).json({ error: 'Cannot mark attendance on holidays/non-working days.' });
     }
     
-    if (userRole === 'student') {
-      // Remove existing record for this specific student on this date to prevent duplicate rows
-      db.attendance = db.attendance.filter(a => !(a.student_id === user.id && a.date === targetDate));
-      
-      const newRecord = {
-        id: `att_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-        student_id: user.id,
-        class_id: user.class_id,
-        date: targetDate,
-        status: status || 'present'
-      };
-      
-      db.attendance.push(newRecord);
-      await writeDatabase(db);
-      await pgUpsertAttendance(newRecord);
-    } else {
-      // Staff attendance
-      if (!db.staff_attendance) db.staff_attendance = [];
-      db.staff_attendance = db.staff_attendance.filter((a: any) => !(a.staff_id === user.id && a.date === targetDate));
-      
-      const newRecord = {
-        id: `st_att_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-        staff_id: user.id,
-        date: targetDate,
-        status: status || 'present'
-      };
-      db.staff_attendance.push(newRecord);
-      await writeDatabase(db);
-      // Assume a pgUpsertStaffAttendance would go here if we implemented it, for now just in dbStore
-    }
+    // Remove existing record for this specific student on this date to prevent duplicate rows
+    db.attendance = db.attendance.filter(a => !(a.student_id === student.id && a.date === targetDate));
+    
+    // Push new attendance record
+    const newRecord = {
+      id: `att_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      student_id: student.id,
+      class_id: student.class_id,
+      date: targetDate,
+      status: status || 'present'
+    };
+    
+    db.attendance.push(newRecord);
+    writeDatabase(db);
     
     res.json({
       status: 'success',
@@ -1225,7 +842,7 @@ app.get('/api/staff-attendance', (req, res) => {
   res.json(readDatabase().staff_attendance);
 });
 
-app.post('/api/staff-attendance', async (req, res) => {
+app.post('/api/staff-attendance', (req, res) => {
   const db = readDatabase();
   const { date, records } = req.body; // records is array of { staff_id, status }
 
@@ -1244,10 +861,7 @@ app.post('/api/staff-attendance', async (req, res) => {
     });
   });
 
-  await writeDatabase(db);
-  for (const rec of db.staff_attendance.filter(sa => sa.date === date)) {
-    await pgUpsertStaffAttendance(rec);
-  }
+  writeDatabase(db);
   res.json({ status: 'success', message: 'Staff attendance saved successfully!' });
 });
 
@@ -1255,7 +869,7 @@ app.get('/api/calendar', (req, res) => {
   res.json(readDatabase().calendar_days);
 });
 
-app.post('/api/calendar', async (req, res) => {
+app.post('/api/calendar', (req, res) => {
   const db = readDatabase();
   const { date, is_working_day } = req.body;
   
@@ -1267,9 +881,7 @@ app.post('/api/calendar', async (req, res) => {
     is_working_day: Boolean(is_working_day)
   });
 
-  const calEntry = db.calendar_days.find(d => d.date === date)!;
-  await writeDatabase(db);
-  await pgUpsertCalendarDay(calEntry);
+  writeDatabase(db);
   res.json({ status: 'success', calendar: db.calendar_days });
 });
 
@@ -1280,7 +892,7 @@ app.get('/api/exams', (req, res) => {
   res.json(readDatabase().exams);
 });
 
-app.post('/api/exams', async (req, res) => {
+app.post('/api/exams', (req, res) => {
   const db = readDatabase();
   const newExam: Exam = {
     id: `exam_${Date.now()}`,
@@ -1291,8 +903,7 @@ app.post('/api/exams', async (req, res) => {
     date_end: req.body.date_end
   };
   db.exams.push(newExam);
-  await writeDatabase(db);
-  await pgUpsertExam(newExam);
+  writeDatabase(db);
   res.json({ status: 'success', exam: newExam });
 });
 
@@ -1300,12 +911,11 @@ app.get('/api/exam-assignments', (req, res) => {
   res.json(readDatabase().exam_assignments);
 });
 
-app.post('/api/exam-assignments', async (req, res) => {
+app.post('/api/exam-assignments', (req, res) => {
   const db = readDatabase();
   const { exam_id, class_id, subject_id } = req.body;
   db.exam_assignments.push({ exam_id, class_id, subject_id });
-  await writeDatabase(db);
-  await pgUpsertExamAssignment(exam_id, class_id, subject_id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -1313,10 +923,23 @@ app.get('/api/exam-results', (req, res) => {
   res.json(readDatabase().exam_results);
 });
 
-app.post('/api/exam-results', async (req, res) => {
+app.post('/api/exam-results', (req, res) => {
   const db = readDatabase();
   const { exam_id, student_id, subject_id, marks_obtained, marks_total } = req.body;
-  
+
+  const obtained = Number(marks_obtained);
+  const total = Number(marks_total);
+
+  if (isNaN(obtained) || isNaN(total) || total <= 0) {
+    return res.status(400).json({ error: 'Total marks must be a positive number.' });
+  }
+  if (obtained < 0) {
+    return res.status(400).json({ error: 'Marks obtained cannot be negative.' });
+  }
+  if (obtained > total) {
+    return res.status(400).json({ error: `Marks obtained (${obtained}) cannot exceed total marks (${total}).` });
+  }
+
   db.exam_results = db.exam_results.filter(
     er => !(er.exam_id === exam_id && er.student_id === student_id && er.subject_id === subject_id)
   );
@@ -1326,13 +949,12 @@ app.post('/api/exam-results', async (req, res) => {
     exam_id,
     student_id,
     subject_id,
-    marks_obtained: Number(marks_obtained),
-    marks_total: Number(marks_total)
+    marks_obtained: obtained,
+    marks_total: total
   };
   
   db.exam_results.push(newResult);
-  await writeDatabase(db);
-  await pgUpsertExamResult(newResult);
+  writeDatabase(db);
   res.json({ status: 'success', result: newResult });
 });
 
@@ -1343,31 +965,70 @@ app.get('/api/fee-heads', (req, res) => {
   res.json(readDatabase().fee_heads);
 });
 
-function getMonthlyPeriodInfo(referenceDate = new Date()) {
+function getMonthlyPeriodInfo(month?: number, year?: number) {
+  const referenceDate = new Date();
+  const m = typeof month === 'number' && month >= 1 && month <= 12 ? month - 1 : referenceDate.getMonth();
+  const y = typeof year === 'number' && year > 2000 ? year : referenceDate.getFullYear();
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  const month = monthNames[referenceDate.getMonth()];
-  const year = referenceDate.getFullYear();
   return {
-    periodLabel: `${month} ${year}`,
-    chargeDate: `${year}-${String(referenceDate.getMonth() + 1).padStart(2, '0')}-01`,
-    dueDate: `${year}-${String(referenceDate.getMonth() + 1).padStart(2, '0')}-10`
+    periodLabel: `${monthNames[m]} ${y}`,
+    chargeDate: `${y}-${String(m + 1).padStart(2, '0')}-01`,
+    dueDate: `${y}-${String(m + 1).padStart(2, '0')}-10`
   };
 }
 
-function getClassDefaultFee(className: string, manualMonthlyFee: number) {
+// Resolution order for a student's monthly fee:
+// 1. Student-specific manual override (manual_monthly_fee)
+// 2. Class-specific billing rule (Settings → Class Billing Rules)
+// 3. Flat school default (Rs. 2500)
+function getClassDefaultFee(db: any, classId: string, manualMonthlyFee: number) {
   if (manualMonthlyFee > 0) return manualMonthlyFee;
-  if (/8/i.test(className)) return 3500;
-  if (/5/i.test(className)) return 3000;
+  const override = (db.class_fee_overrides || []).find((o: any) => o.class_id === classId);
+  if (override) return override.monthly_fee;
   return 2500;
 }
 
-app.post('/api/generate-bills', async (req, res) => {
+// -----------------------------------------------------------------------------
+// CLASS FEE OVERRIDES (Settings → Class Billing Rules)
+// -----------------------------------------------------------------------------
+app.get('/api/class-fee-overrides', (req, res) => {
+  res.json(readDatabase().class_fee_overrides || []);
+});
+
+app.post('/api/class-fee-overrides', (req, res) => {
   const db = readDatabase();
-  const { class_id } = req.body || {};
-  const { periodLabel, chargeDate, dueDate } = getMonthlyPeriodInfo();
+  const { class_id, monthly_fee } = req.body || {};
+  const fee = Number(monthly_fee);
+
+  if (!class_id) return res.status(400).json({ error: 'class_id is required.' });
+  if (isNaN(fee) || fee <= 0) return res.status(400).json({ error: 'monthly_fee must be a positive number.' });
+  if (!db.classes.some(c => c.id === class_id)) return res.status(404).json({ error: 'Class not found.' });
+
+  db.class_fee_overrides = (db.class_fee_overrides || []).filter(o => o.class_id !== class_id);
+  const newOverride = { id: `cfo_${Date.now()}`, school_id: 'school_1', class_id, monthly_fee: fee };
+  db.class_fee_overrides.push(newOverride);
+
+  writeDatabase(db);
+  res.json({ status: 'success', override: newOverride });
+});
+
+app.delete('/api/class-fee-overrides/:id', (req, res) => {
+  const db = readDatabase();
+  db.class_fee_overrides = (db.class_fee_overrides || []).filter(o => o.id !== req.params.id);
+  writeDatabase(db);
+  res.json({ status: 'success' });
+});
+
+app.post('/api/generate-bills', (req, res) => {
+  const db = readDatabase();
+  const { class_id, month, year } = req.body || {};
+  const { periodLabel, chargeDate, dueDate } = getMonthlyPeriodInfo(
+    month !== undefined ? Number(month) : undefined,
+    year !== undefined ? Number(year) : undefined
+  );
 
   const targetStudents = db.students.filter(student => {
     const isActive = student.status === 'active';
@@ -1389,9 +1050,7 @@ app.post('/api/generate-bills', async (req, res) => {
 
     if (alreadyGenerated) continue;
 
-    const classRecord = db.classes.find(item => item.id === student.class_id);
-    const className = classRecord?.name || 'Grade 1';
-    const monthlyAmount = getClassDefaultFee(className, Number(student.manual_monthly_fee) || 0);
+    const monthlyAmount = getClassDefaultFee(db, student.class_id, Number(student.manual_monthly_fee) || 0);
 
     const newFeeHead: FeeHead = {
       id: `fh_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
@@ -1413,10 +1072,7 @@ app.post('/api/generate-bills', async (req, res) => {
   }
 
   if (generatedCount > 0) {
-    await writeDatabase(db);
-    for (const fh of createdHeads) {
-      await pgUpsertFeeHead(fh);
-    }
+    writeDatabase(db);
   }
 
   res.json({
@@ -1427,7 +1083,7 @@ app.post('/api/generate-bills', async (req, res) => {
   });
 });
 
-app.post('/api/fee-heads', async (req, res) => {
+app.post('/api/fee-heads', (req, res) => {
   const db = readDatabase();
   const { student_id, type, title, configured_amount } = req.body;
 
@@ -1446,13 +1102,12 @@ app.post('/api/fee-heads', async (req, res) => {
   };
 
   db.fee_heads.push(newFeeHead);
-  await writeDatabase(db);
-  await pgUpsertFeeHead(newFeeHead);
+  writeDatabase(db);
   res.json({ status: 'success', fee_head: newFeeHead, message: 'Student expense added successfully!' });
 });
 
 // Main Fee Collection Payment processing (with split payments and Ledger entries posting)
-app.post('/api/payments', async (req, res) => {
+app.post('/api/payments', (req, res) => {
   const db = readDatabase();
   const { student_id, amount, method, fee_head_id, note, receipt_type } = req.body;
   const payAmount = Number(amount);
@@ -1464,6 +1119,34 @@ app.post('/api/payments', async (req, res) => {
   const student = db.students.find(s => s.id === student_id);
   if (!student) {
     return res.status(404).json({ error: 'Student not found.' });
+  }
+
+  // Guard against overpayment: a collected amount can never exceed what is
+  // actually pending, otherwise the excess would be posted to the ledger as
+  // "income" with no matching fee head — silently inflating the school's cash
+  // balance with money that was never really owed.
+  if (fee_head_id) {
+    const selectedForCheck = db.fee_heads.find(fh => fh.id === fee_head_id && fh.student_id === student_id);
+    if (!selectedForCheck || selectedForCheck.status !== 'PENDING') {
+      return res.status(404).json({ error: 'Selected fee head not found or already paid.' });
+    }
+    if (payAmount > selectedForCheck.pending_amount) {
+      return res.status(400).json({
+        error: `Amount exceeds the pending balance for this fee head (Rs. ${selectedForCheck.pending_amount}).`
+      });
+    }
+  } else {
+    const totalPendingForStudent = db.fee_heads
+      .filter(fh => fh.student_id === student_id && fh.status === 'PENDING')
+      .reduce((sum, fh) => sum + fh.pending_amount, 0);
+    if (totalPendingForStudent <= 0) {
+      return res.status(400).json({ error: 'This student has no pending dues to collect.' });
+    }
+    if (payAmount > totalPendingForStudent) {
+      return res.status(400).json({
+        error: `Amount exceeds total pending dues for this student (Rs. ${totalPendingForStudent}). Please enter Rs. ${totalPendingForStudent} or less.`
+      });
+    }
   }
 
   const payDate = new Date().toISOString().split('T')[0];
@@ -1544,17 +1227,7 @@ app.post('/api/payments', async (req, res) => {
     payAmount // credit (income received)
   );
 
-  await writeDatabase(db);
-  // Sync updated fee heads and new payments to Postgres
-  for (const fh of db.fee_heads.filter(f => f.student_id === student_id)) {
-    await pgUpsertFeeHead(fh);
-  }
-  for (const pay of db.payments.filter(p => p.receipt_no === receipt_no)) {
-    await pgUpsertPayment(pay);
-  }
-  // Sync new ledger entries
-  const lastLedger = db.ledger_entries[db.ledger_entries.length - 1];
-  if (lastLedger) await pgUpsertLedgerEntry(lastLedger);
+  writeDatabase(db);
   res.json({
     status: 'success',
     receipt_no,
@@ -1570,7 +1243,7 @@ app.get('/api/expenses', (req, res) => {
   res.json(readDatabase().expenses);
 });
 
-app.post('/api/expenses', async (req, res) => {
+app.post('/api/expenses', (req, res) => {
   const db = readDatabase();
   const { description, category, amount, date } = req.body;
   const expAmount = Number(amount);
@@ -1597,19 +1270,15 @@ app.post('/api/expenses', async (req, res) => {
     0 // credit
   );
 
-  await writeDatabase(db);
-  await pgUpsertExpense(newExp);
-  const lastLedgerExp = db.ledger_entries[db.ledger_entries.length - 1];
-  if (lastLedgerExp) await pgUpsertLedgerEntry(lastLedgerExp);
+  writeDatabase(db);
   res.json({ status: 'success', expense: newExp });
 });
 
-app.delete('/api/expenses/:id', async (req, res) => {
+app.delete('/api/expenses/:id', (req, res) => {
   const db = readDatabase();
   // Find expense to reverse or remove ledger if necessary (or simply remove from array)
   db.expenses = db.expenses.filter(e => e.id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteExpense(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -1617,7 +1286,7 @@ app.get('/api/income', (req, res) => {
   res.json(readDatabase().income);
 });
 
-app.post('/api/income', async (req, res) => {
+app.post('/api/income', (req, res) => {
   const db = readDatabase();
   const { description, source, amount, date } = req.body;
   const incAmount = Number(amount);
@@ -1644,18 +1313,14 @@ app.post('/api/income', async (req, res) => {
     incAmount // credit
   );
 
-  await writeDatabase(db);
-  await pgUpsertIncome(newInc);
-  const lastLedgerInc = db.ledger_entries[db.ledger_entries.length - 1];
-  if (lastLedgerInc) await pgUpsertLedgerEntry(lastLedgerInc);
+  writeDatabase(db);
   res.json({ status: 'success', income: newInc });
 });
 
-app.delete('/api/income/:id', async (req, res) => {
+app.delete('/api/income/:id', (req, res) => {
   const db = readDatabase();
   db.income = db.income.filter(i => i.id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteIncome(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -1670,7 +1335,7 @@ app.get('/api/bad-debts', (req, res) => {
   res.json(readDatabase().bad_debts);
 });
 
-app.post('/api/bad-debts', async (req, res) => {
+app.post('/api/bad-debts', (req, res) => {
   const db = readDatabase();
   const { student_id, amount, reason, date } = req.body;
   const bdAmount = Number(amount);
@@ -1696,10 +1361,7 @@ app.post('/api/bad-debts', async (req, res) => {
     0 // credit
   );
 
-  await writeDatabase(db);
-  await pgUpsertBadDebt(newBd);
-  const lastLedgerBd = db.ledger_entries[db.ledger_entries.length - 1];
-  if (lastLedgerBd) await pgUpsertLedgerEntry(lastLedgerBd);
+  writeDatabase(db);
   res.json({ status: 'success', bad_debt: newBd });
 });
 
@@ -1710,7 +1372,7 @@ app.get('/api/stationery', (req, res) => {
   res.json(readDatabase().stationery_items);
 });
 
-app.post('/api/stationery', async (req, res) => {
+app.post('/api/stationery', (req, res) => {
   const db = readDatabase();
   const { item_name, quantity, unit_price } = req.body;
 
@@ -1723,16 +1385,14 @@ app.post('/api/stationery', async (req, res) => {
   };
 
   db.stationery_items.push(newItem);
-  await writeDatabase(db);
-  await pgUpsertStationery(newItem);
+  writeDatabase(db);
   res.json({ status: 'success', item: newItem });
 });
 
-app.delete('/api/stationery/:id', async (req, res) => {
+app.delete('/api/stationery/:id', (req, res) => {
   const db = readDatabase();
   db.stationery_items = db.stationery_items.filter(i => i.id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteStationery(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 
@@ -1743,7 +1403,7 @@ app.get('/api/inventory', (req, res) => {
   res.json(readDatabase().inventory_items);
 });
 
-app.post('/api/inventory', async (req, res) => {
+app.post('/api/inventory', (req, res) => {
   const db = readDatabase();
   const { item_name, category, quantity, value } = req.body;
 
@@ -1757,16 +1417,14 @@ app.post('/api/inventory', async (req, res) => {
   };
 
   db.inventory_items.push(newItem);
-  await writeDatabase(db);
-  await pgUpsertInventory(newItem);
+  writeDatabase(db);
   res.json({ status: 'success', item: newItem });
 });
 
-app.delete('/api/inventory/:id', async (req, res) => {
+app.delete('/api/inventory/:id', (req, res) => {
   const db = readDatabase();
   db.inventory_items = db.inventory_items.filter(i => i.id !== req.params.id);
-  await writeDatabase(db);
-  await pgDeleteInventory(req.params.id);
+  writeDatabase(db);
   res.json({ status: 'success' });
 });
 

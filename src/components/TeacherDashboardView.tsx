@@ -126,7 +126,7 @@ export default function TeacherDashboardView({ user, db: initialDb, school, onLo
 
   const handleSaveAttendance = async () => {
     if (!attClass || !attDate || attStudents.length === 0) {
-      addToast('Select class, section and date first.', 'error');
+      addToast('error', 'Select class, section and date first.');
       return;
     }
     setSavingAtt(true);
@@ -143,14 +143,14 @@ export default function TeacherDashboardView({ user, db: initialDb, school, onLo
         body: JSON.stringify({ records })
       });
       if (res.ok) {
-        addToast(`Attendance saved for ${records.length} students!`, 'success');
+        addToast('success', `Attendance saved for ${records.length} students!`);
         setAttStatuses({});
       } else {
         // Fallback: update local state
-        addToast('Attendance saved locally!', 'success');
+        addToast('success', 'Attendance saved locally!');
       }
     } catch {
-      addToast('Attendance saved!', 'success');
+      addToast('success', 'Attendance saved!');
     }
     setSavingAtt(false);
   };
@@ -158,7 +158,7 @@ export default function TeacherDashboardView({ user, db: initialDb, school, onLo
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClassSubject || !newTitle) {
-      addToast('Please fill all required fields.', 'error');
+      addToast('error', 'Please fill all required fields.');
       return;
     }
     const [cId, sId] = selectedClassSubject.split('|');
@@ -173,18 +173,18 @@ export default function TeacherDashboardView({ user, db: initialDb, school, onLo
         setDb({ ...db, assignments: [...(db.assignments || []), data] });
         setIsCreating(false);
         setNewTitle(''); setNewDesc(''); setNewDueDate('');
-        addToast('Assignment published!', 'success');
+        addToast('success', 'Assignment published!');
       } else {
-        addToast('Failed to create assignment.', 'error');
+        addToast('error', 'Failed to create assignment.');
       }
     } catch {
-      addToast('Network error.', 'error');
+      addToast('error', 'Network error.');
     }
   };
 
   const handleSaveResults = async () => {
     if (!resClass || !resSubject || !resExam) {
-      addToast('Select class, subject and exam first.', 'error');
+      addToast('error', 'Select class, subject and exam first.');
       return;
     }
     setSavingRes(true);
@@ -205,10 +205,10 @@ export default function TeacherDashboardView({ user, db: initialDb, school, onLo
           })
         });
       }
-      addToast('Results saved successfully!', 'success');
+      addToast('success', 'Results saved successfully!');
       setResMarks({});
     } catch {
-      addToast('Error saving results.', 'error');
+      addToast('error', 'Error saving results.');
     }
     setSavingRes(false);
   };

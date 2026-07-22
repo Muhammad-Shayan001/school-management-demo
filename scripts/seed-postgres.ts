@@ -62,6 +62,9 @@ async function run() {
         { id: 'subj_sci', school_id: 'school_1', name: 'Science' },
         { id: 'subj_urdu', school_id: 'school_1', name: 'Urdu' }
       ],
+      class_fee_overrides: [],
+      assignments: [],
+      assignment_submissions: [],
       class_subjects: [
         { class_id: 'class_g1', subject_id: 'subj_math' }, { class_id: 'class_g1', subject_id: 'subj_eng' },
         { class_id: 'class_g5', subject_id: 'subj_math' }, { class_id: 'class_g5', subject_id: 'subj_eng' }, { class_id: 'class_g5', subject_id: 'subj_sci' },

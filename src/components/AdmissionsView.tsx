@@ -41,9 +41,6 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
   const [address, setAddress] = useState('');
   const [guardianName, setGuardianName] = useState('');
   const [guardianContact, setGuardianContact] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
   const [classId, setClassId] = useState('');
   const [sectionId, setSectionId] = useState('');
   const [admissionFee, setAdmissionFee] = useState(2250);
@@ -62,12 +59,11 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
   const [certSelections, setCertSelections] = useState<Record<string, string>>({});
 
   // Load defaults
-  // We no longer auto-select the first class so the user is forced to choose one.
-  // useEffect(() => {
-  //   if (db.classes.length > 0) {
-  //     if (!classId) setClassId(db.classes[0].id);
-  //   }
-  // }, [db.classes, classId]);
+  useEffect(() => {
+    if (db.classes.length > 0) {
+      if (!classId) setClassId(db.classes[0].id);
+    }
+  }, [db.classes, classId]);
 
   useEffect(() => {
     if (classId) {
@@ -112,10 +108,7 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
         manual_monthly_fee: setManualFee ? manualTuitionFee : 0,
         billing_mode: billingMode,
         family_id: billingMode === 'family' ? familyId : '',
-        status: 'active',
-        email: email.trim(),
-        password: password.trim(),
-        image_url: imageUrl
+        status: 'active'
       };
 
       const res = await fetch('/api/students', {
@@ -138,9 +131,6 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
         setManualTuitionFee(0);
         setBillingMode('individual');
         setFamilyId('');
-        setEmail('');
-        setPassword('');
-        setImageUrl('');
         
         onRefresh();
         setCurrentSubTab('All Students');
@@ -261,54 +251,6 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
           </div>
 
           <form onSubmit={handleRegisterStudent} className="space-y-6 max-w-4xl">
-            {/* Section 0: Login Credentials & Photo */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide border-l-2 border-slate-800 pl-2 mb-4">
-                Login Credentials & Profile Image
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Student Login Email *</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="student@school.com"
-                    className="w-full text-xs p-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-900"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Account Password *</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    className="w-full text-xs p-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-900"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Profile Image</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => setImageUrl(reader.result as string);
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                    className="w-full text-xs p-1.5 border border-gray-200 rounded-lg bg-white"
-                  />
-                  {imageUrl && <img src={imageUrl} alt="Preview" className="mt-2 h-10 w-10 object-cover rounded-full border border-gray-300" />}
-                </div>
-              </div>
-            </div>
-
             {/* Section 1: Personal Info */}
             <div>
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide border-l-2 border-slate-800 pl-2 mb-4">
@@ -427,7 +369,6 @@ export default function AdmissionsView({ db, onRefresh, onNavigate, initialTab =
                     className="w-full text-xs p-2.5 border border-gray-200 rounded-lg bg-white focus:outline-none"
                     required
                   >
-                    <option value="">-- Choose Class --</option>
                     {db.classes.map(c => (
                       <option key={c.id} value={c.id}>
                         {c.name}

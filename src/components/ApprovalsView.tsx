@@ -23,14 +23,14 @@ export default function ApprovalsView({ db, refreshDatabase }: ApprovalsViewProp
         body: JSON.stringify({ id, type, action })
       });
       if (res.ok) {
-        addToast(`User successfully ${action}d!`, 'success');
+        addToast('success', `User successfully ${action}d!`);
         refreshDatabase();
       } else {
         const data = await res.json();
-        addToast(data.error || `Failed to ${action} user`, 'error');
+        addToast('error', data.error || `Failed to ${action} user`);
       }
     } catch (err) {
-      addToast('Network error', 'error');
+      addToast('error', 'Network error');
     } finally {
       setLoading(null);
     }

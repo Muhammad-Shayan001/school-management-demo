@@ -72,6 +72,125 @@ export default function AdditionalView({ db, schoolBranding }: AdditionalViewPro
 
   const birthdays = getUpcomingBirthdays();
 
+  // ---------------------------------------------------------------------------
+  // PDF GENERATOR — Students List / Staff Directory / Fee Defaulters / Financial Summary
+  // ---------------------------------------------------------------------------
+  const addPdfHeader = (doc: jsPDF, title: string) => {
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(schoolBranding?.name || 'School', 14, 16);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(title, 14, 23);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 28);
+    doc.setDrawColor(200);
+    doc.line(14, 31, 196, 31);
+    return 39;
+  };
+
+  const drawTableRow = (doc: jsPDF, y: number, cols: string[], widths: number[], bold = false) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(9);
+    let x = 14;
+    cols.forEach((c, i) => {
+      doc.text(String(c), x, y, { maxWidth: widths[i] - 2 });
+      x += widths[i];
+    });
+    return y + 7;
+  };
+
+  const ensureSpace = (doc: jsPDF, y: number) => {
+    if (y > 280) {
+      doc.addPage();
+      return 20;
+    }
+    return y;
+  };
+
+  const handleGenerateStudentsListPDF = () => {
+    const doc = new jsPDF();
+    let y = addPdfHeader(doc, 'Students List — Class-wise Directory');
+    const widths = [45, 20, 30, 40, 40];
+    y = drawTableRow(doc, y, ['Name', 'Class', 'Reg No.', 'Guardian', 'Contact'], widths, true);
+    doc.line(14, y - 5, 196, y - 5);
+    [...students]
+      .filter(s => s.status === 'active')
+      .sort((a, b) => a.class_id.localeCompare(b.class_id))
+      .forEach(s => {
+        y = ensureSpace(doc, y);
+        const cls = db.classes.find(c => c.id === s.class_id)?.name || s.class_id;
+        y = drawTableRow(doc, y, [s.name, cls, s.reg_no, s.guardian_name || '-', s.contact || '-'], widths);
+      });
+    doc.save(`Students_List_${new Date().toISOString().split('T')[0]}.pdf`);
+    addToast('success', 'Students List PDF downloaded.');
+  };
+
+  const handleGenerateStaffDirectoryPDF = () => {
+    const doc = new jsPDF();
+    let y = addPdfHeader(doc, 'Staff Directory — Complete Employee List');
+    const widths = [45, 30, 35, 30, 30];
+    y = drawTableRow(doc, y, ['Name', 'Employee ID', 'Contact', 'Joined', 'Salary (Rs.)'], widths, true);
+    doc.line(14, y - 5, 196, y - 5);
+    staff.filter(s => s.status === 'active').forEach(s => {
+      y = ensureSpace(doc, y);
+      y = drawTableRow(doc, y, [s.name, s.employee_id, s.contact || '-', s.joining_date || '-', (s.salary || 0).toLocaleString()], widths);
+    });
+    doc.save(`Staff_Directory_${new Date().toISOString().split('T')[0]}.pdf`);
+    addToast('success', 'Staff Directory PDF downloaded.');
+  };
+
+  const handleGenerateFeeDefaultersPDF = () => {
+    const doc = new jsPDF();
+    let y = addPdfHeader(doc, 'Fee Defaulters — Students with Pending Dues');
+    const widths = [50, 25, 40, 35];
+    y = drawTableRow(doc, y, ['Student', 'Class', 'Guardian Contact', 'Pending (Rs.)'], widths, true);
+    doc.line(14, y - 5, 196, y - 5);
+    let grandTotal = 0;
+    students.filter(s => s.status === 'active').forEach(s => {
+      const pending = db.fee_heads
+        .filter(fh => fh.student_id === s.id && fh.status === 'PENDING')
+        .reduce((sum, fh) => sum + fh.pending_amount, 0);
+      if (pending <= 0) return;
+      grandTotal += pending;
+      y = ensureSpace(doc, y);
+      const cls = db.classes.find(c => c.id === s.class_id)?.name || s.class_id;
+      y = drawTableRow(doc, y, [s.name, cls, s.guardian_contact || s.contact || '-', pending.toLocaleString()], widths);
+    });
+    y = ensureSpace(doc, y);
+    y += 3;
+    doc.line(14, y - 5, 196, y - 5);
+    y = drawTableRow(doc, y, ['', '', 'Total Outstanding', grandTotal.toLocaleString()], widths, true);
+    doc.save(`Fee_Defaulters_${new Date().toISOString().split('T')[0]}.pdf`);
+    addToast('success', 'Fee Defaulters PDF downloaded.');
+  };
+
+  const handleGenerateFinancialSummaryPDF = () => {
+    const doc = new jsPDF();
+    let y = addPdfHeader(doc, 'Financial Summary');
+
+    const totalCollected = (db.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalExpenses = (db.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+    const totalOtherIncome = (db.income || []).reduce((sum, i) => sum + (i.amount || 0), 0);
+    const totalPending = (db.fee_heads || [])
+      .filter(fh => fh.status === 'PENDING')
+      .reduce((sum, fh) => sum + fh.pending_amount, 0);
+    const net = totalCollected + totalOtherIncome - totalExpenses;
+
+    const widths = [90, 60];
+    y = drawTableRow(doc, y, ['Metric', 'Amount (Rs.)'], widths, true);
+    doc.line(14, y - 5, 196, y - 5);
+    y = drawTableRow(doc, y, ['Total Fee Collected', totalCollected.toLocaleString()], widths);
+    y = drawTableRow(doc, y, ['Other Income', totalOtherIncome.toLocaleString()], widths);
+    y = drawTableRow(doc, y, ['Total Expenses', totalExpenses.toLocaleString()], widths);
+    y = drawTableRow(doc, y, ['Pending Dues (Outstanding)', totalPending.toLocaleString()], widths);
+    y += 3;
+    doc.line(14, y - 5, 196, y - 5);
+    y = drawTableRow(doc, y, ['Net (Collected + Other Income − Expenses)', net.toLocaleString()], widths, true);
+
+    doc.save(`Financial_Summary_${new Date().toISOString().split('T')[0]}.pdf`);
+    addToast('success', 'Financial Summary PDF downloaded.');
+  };
+
   const handlePrintVoucher = (family: Family) => {
     const familyStudents = students.filter(s => s.family_id === family.id);
     const doc = new jsPDF('landscape', 'mm', 'a4');
@@ -251,10 +370,10 @@ export default function AdditionalView({ db, schoolBranding }: AdditionalViewPro
       {currentSubTab === 'PDF Generator' && (
         <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
-            { title: 'Students List PDF', desc: 'Class-wise student directory with contacts.' },
-            { title: 'Staff Directory PDF', desc: 'Complete employee list with salaries.' },
-            { title: 'Fee Defaulters PDF', desc: 'List of students with pending dues.' },
-            { title: 'Financial Summary PDF', desc: 'Monthly income and expense summary.' }
+            { title: 'Students List PDF', desc: 'Class-wise student directory with contacts.', handler: handleGenerateStudentsListPDF },
+            { title: 'Staff Directory PDF', desc: 'Complete employee list with salaries.', handler: handleGenerateStaffDirectoryPDF },
+            { title: 'Fee Defaulters PDF', desc: 'List of students with pending dues.', handler: handleGenerateFeeDefaultersPDF },
+            { title: 'Financial Summary PDF', desc: 'Monthly income and expense summary.', handler: handleGenerateFinancialSummaryPDF }
           ].map((r, i) => (
             <div key={i} className="bg-white border border-gray-100 rounded-xl p-5 hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer group">
               <div className="h-10 w-10 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -262,7 +381,7 @@ export default function AdditionalView({ db, schoolBranding }: AdditionalViewPro
               </div>
               <h4 className="font-bold text-gray-900 text-sm">{r.title}</h4>
               <p className="text-xs text-gray-500 mt-1">{r.desc}</p>
-              <button className="mt-4 text-xs font-semibold text-indigo-600 flex items-center gap-1 group-hover:text-indigo-800">
+              <button onClick={r.handler} className="mt-4 text-xs font-semibold text-indigo-600 flex items-center gap-1 group-hover:text-indigo-800 cursor-pointer">
                 Generate <ArrowUpRight className="h-3 w-3" />
               </button>
             </div>

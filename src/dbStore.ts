@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import {
   DatabaseSchema,
   School,
@@ -32,6 +33,20 @@ import {
 // Data is seeded with dummy records on first access.
 // ---------------------------------------------------------------------------
 
+// Password hashing helper — used for all seeded and newly-created accounts
+// (admin, staff, student). Never store or compare plain-text passwords.
+export function hashPassword(plain: string): string {
+  return bcrypt.hashSync(plain, 10);
+}
+
+export function verifyPassword(plain: string, hash: string): boolean {
+  try {
+    return bcrypt.compareSync(plain, hash);
+  } catch {
+    return false;
+  }
+}
+
 let inMemoryDb: DatabaseSchema | null = null;
 
 function persistDatabase(dbState: DatabaseSchema): void {
@@ -46,25 +61,8 @@ function loadDatabase(): DatabaseSchema {
 }
 
 export function ensureDatabaseExists(): void {
-  if (!inMemoryDb || !inMemoryDb.schools || inMemoryDb.schools.length === 0 || !inMemoryDb.classes || inMemoryDb.classes.length === 0) {
+  if (!inMemoryDb || !inMemoryDb.schools || inMemoryDb.schools.length === 0) {
     fillDummyData();
-  }
-  
-  // Ensure everyone has an ID card number
-  if (inMemoryDb) {
-    let stCounter = 1;
-    inMemoryDb.students.forEach(st => {
-      if (!st.id_card_no) {
-        st.id_card_no = `SK-STU-2026-${String(stCounter++).padStart(6, '0')}`;
-      }
-    });
-    let tCounter = 1;
-    inMemoryDb.staff.forEach(st => {
-      if (!st.id_card_no) {
-        const prefix = st.role === 'admin' ? 'ADM' : st.role === 'principal' ? 'PRI' : 'TCH';
-        st.id_card_no = `SK-${prefix}-2026-${String(tCounter++).padStart(6, '0')}`;
-      }
-    });
   }
 }
 
@@ -89,7 +87,7 @@ export function getEmptyDatabase(): DatabaseSchema {
         school_id: 'school_1',
         name: 'Admin User',
         email: 'rana@school.com',
-        password_hash: 'admin123',
+        password_hash: hashPassword('admin123'),
       },
     ],
     sessions: [
@@ -106,6 +104,7 @@ export function getEmptyDatabase(): DatabaseSchema {
     sections: [],
     subjects: [],
     class_subjects: [],
+    class_fee_overrides: [],
     exams: [],
     exam_assignments: [],
     students: [],
@@ -186,20 +185,16 @@ export function fillDummyData(): void {
   };
   db.sessions = [session1];
 
-  const classNames = ['Prep', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'];
-  const classes: Class[] = classNames.map((name, i) => ({
-    id: `class_g${i}`,
-    school_id: schoolId,
-    name
-  }));
-  db.classes = classes;
+  const grade1: Class = { id: 'class_g1', school_id: schoolId, name: 'Grade 1' };
+  const grade5: Class = { id: 'class_g5', school_id: schoolId, name: 'Grade 5' };
+  const grade8: Class = { id: 'class_g8', school_id: schoolId, name: 'Grade 8' };
+  db.classes = [grade1, grade5, grade8];
 
-  const sections: Section[] = [];
-  classes.forEach(cls => {
-    sections.push({ id: `sec_${cls.id}_a`, class_id: cls.id, name: 'A' });
-    sections.push({ id: `sec_${cls.id}_b`, class_id: cls.id, name: 'B' });
-  });
-  db.sections = sections;
+  const secA: Section = { id: 'sec_a', class_id: 'class_g1', name: 'A' };
+  const secB: Section = { id: 'sec_b', class_id: 'class_g5', name: 'A' };
+  const secC: Section = { id: 'sec_c', class_id: 'class_g5', name: 'B' };
+  const secD: Section = { id: 'sec_d', class_id: 'class_g8', name: 'A' };
+  db.sections = [secA, { id: 'sec_1b', class_id: 'class_g1', name: 'B' }, secB, secC, secD];
 
   const eng: Subject = { id: 'subj_eng', school_id: schoolId, name: 'English' };
   const urd: Subject = { id: 'subj_urd', school_id: schoolId, name: 'Urdu' };
@@ -277,7 +272,7 @@ export function fillDummyData(): void {
     school_id: schoolId,
     reg_no: 'RS-2026-0001',
     login_id: 'ali_raza',
-    password_hash: 'ali123',
+    password_hash: hashPassword('ali123'),
     name: 'Ali Raza',
     father_name: 'Raza Ahmed',
     gender: 'male',
@@ -302,7 +297,7 @@ export function fillDummyData(): void {
     school_id: schoolId,
     reg_no: 'RS-2026-0002',
     login_id: 'ayesha_raza',
-    password_hash: 'ayesha123',
+    password_hash: hashPassword('ayesha123'),
     name: 'Ayesha Raza',
     father_name: 'Raza Ahmed',
     gender: 'female',
@@ -327,7 +322,7 @@ export function fillDummyData(): void {
     school_id: schoolId,
     reg_no: 'RS-2026-0003',
     login_id: 'hamza_khan',
-    password_hash: 'hamza123',
+    password_hash: hashPassword('hamza123'),
     name: 'Hamza Khan',
     father_name: 'Imran Khan',
     gender: 'male',
@@ -352,7 +347,7 @@ export function fillDummyData(): void {
     school_id: schoolId,
     reg_no: 'RS-2026-0004',
     login_id: 'fatima_noor',
-    password_hash: 'fatima123',
+    password_hash: hashPassword('fatima123'),
     name: 'Fatima Noor',
     father_name: 'Sajid Noor',
     gender: 'female',
@@ -377,7 +372,7 @@ export function fillDummyData(): void {
     school_id: schoolId,
     reg_no: 'RS-2026-0005',
     login_id: 'bilal_ahmed',
-    password_hash: 'bilal123',
+    password_hash: hashPassword('bilal123'),
     name: 'Bilal Ahmed',
     father_name: 'Tariq Ahmed',
     gender: 'male',
@@ -404,7 +399,7 @@ export function fillDummyData(): void {
     school_id: schoolId,
     employee_id: 'EMP-2026-0001',
     login_id: 'teacher_nida',
-    password_hash: 'nida123',
+    password_hash: hashPassword('nida123'),
     name: 'Nida Fatima',
     father_name: 'Aslam Khan',
     cnic: '35202-1234567-8',
@@ -423,7 +418,7 @@ export function fillDummyData(): void {
     school_id: schoolId,
     employee_id: 'EMP-2026-0002',
     login_id: 'teacher_asim',
-    password_hash: 'asim123',
+    password_hash: hashPassword('asim123'),
     name: 'Asim Raza',
     father_name: 'Munir Ahmed',
     cnic: '35201-9876543-1',

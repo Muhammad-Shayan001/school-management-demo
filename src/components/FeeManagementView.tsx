@@ -60,6 +60,11 @@ export default function FeeManagementView({ db, schoolBranding, onRefresh, initi
   // Receipt printable state
   const [printedReceipt, setPrintedReceipt] = useState<Payment | null>(null);
 
+  // Bulk Monthly Billing — month/year to generate for (defaults to current month)
+  const now = new Date();
+  const [billingMonth, setBillingMonth] = useState<number>(now.getMonth() + 1);
+  const [billingYear, setBillingYear] = useState<number>(now.getFullYear());
+
   // Auto-set selected student's heads on select
   useEffect(() => {
     if (selectedStudent) {
@@ -147,16 +152,24 @@ export default function FeeManagementView({ db, schoolBranding, onRefresh, initi
   };
 
   const handleGenerateMonthlyBills = async () => {
-    if (!confirm('Generate Monthly Tuition Bills for all Active Students across the School? This will append tuition records to Fee Heads.')) return;
+    const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][billingMonth - 1];
+    if (!confirm(`Generate Monthly Tuition Bills for all Active Students for ${monthName} ${billingYear}? This will append tuition records to Fee Heads.`)) return;
     try {
-      const res = await fetch('/api/generate-bills', { method: 'POST' });
+      const res = await fetch('/api/generate-bills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: billingMonth, year: billingYear })
+      });
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
-        addToast('success', `Success! Generated tuition bills for ${data.generated_count} active students.`);
+        addToast('success', `Success! Generated tuition bills for ${data.generated_count} active students (${data.period_label}).`);
         onRefresh();
+      } else {
+        addToast('error', data.error || 'Failed to generate bills.');
       }
     } catch (err) {
       console.error(err);
+      addToast('error', 'Failed to generate bills.');
     }
   };
 
@@ -179,8 +192,8 @@ export default function FeeManagementView({ db, schoolBranding, onRefresh, initi
         body: JSON.stringify(payload)
       });
 
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         addToast('success', 'Fee cleared successfully! Dynamic ledger entries posted.');
         
         // Save the payment for direct print-dialog trigger
@@ -189,10 +202,11 @@ export default function FeeManagementView({ db, schoolBranding, onRefresh, initi
         setSelectedStudent(null);
         onRefresh();
       } else {
-        addToast('error', 'Payment processing failed.');
+        addToast('error', data.error || 'Payment processing failed.');
       }
     } catch (err) {
       console.error(err);
+      addToast('error', 'Payment processing failed. Please try again.');
     }
   };
 
@@ -600,15 +614,35 @@ export default function FeeManagementView({ db, schoolBranding, onRefresh, initi
               </span>
               <h3 className="text-lg font-bold mt-1">Bulk Monthly Tuition Billing</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Click this button to dynamically charge all active students their defined standard/scholarship tuition fee.
+                Select a billing period, then charge all active students their standard/class/manual tuition fee for that month.
               </p>
             </div>
-            <button
-              onClick={handleGenerateMonthlyBills}
-              className="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
-            >
-              Generate All Monthly Bills
-            </button>
+            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 shrink-0">
+              <select
+                value={billingMonth}
+                onChange={e => setBillingMonth(Number(e.target.value))}
+                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-2.5"
+              >
+                {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, idx) => (
+                  <option key={m} value={idx + 1}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={billingYear}
+                onChange={e => setBillingYear(Number(e.target.value))}
+                className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-2.5"
+              >
+                {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleGenerateMonthlyBills}
+                className="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                Generate Monthly Bills
+              </button>
+            </div>
           </div>
 
           {/* Cards metrics */}

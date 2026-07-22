@@ -119,7 +119,7 @@ export default function StudentDashboardView({ user, db: initialDb, school, onLo
         body: JSON.stringify({ assignment_id: assignmentId, student_id: student.id, content: submissionText })
       });
       if (res.ok) {
-        addToast('Assignment submitted!', 'success');
+        addToast('success', 'Assignment submitted!');
         const newSub = {
           id: `sub_${Date.now()}`,
           assignment_id: assignmentId,
@@ -132,10 +132,10 @@ export default function StudentDashboardView({ user, db: initialDb, school, onLo
         setSubmittingId(null);
         setSubmissionText('');
       } else {
-        addToast('Failed to submit.', 'error');
+        addToast('error', 'Failed to submit.');
       }
     } catch {
-      addToast('Network error.', 'error');
+      addToast('error', 'Network error.');
     }
   };
 

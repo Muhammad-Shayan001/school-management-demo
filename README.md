@@ -1,22 +1,23 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# SQL Backend Foundation
 
-# Rana School Management System
+The running app backend is currently implemented in [server.ts](../server.ts) and uses the JSON persistence layer in [src/dbStore.ts](../src/dbStore.ts).
 
-The app now runs on the Node/Express backend in [server.ts](server.ts) with a real SQLite persistence layer in [src/dbStore.ts](src/dbStore.ts). The production SQL schema is available at [sql/schema.postgres.sql](sql/schema.postgres.sql).
+This folder adds a PostgreSQL schema that matches the current app data model:
 
-## Run Locally
+- [schema.postgres.sql](schema.postgres.sql)
 
-**Prerequisites:** Node.js
+Use this file if you want to migrate the app from the current JSON store to a real SQL backend for production deployment.
 
-1. Install dependencies:
-   `npm install`
-2. Run the app:
-   `npm run dev`
+What already exists in the codebase:
 
-## Backend Notes
+- Express API routes in [server.ts](../server.ts)
+- JSON database helpers in [src/dbStore.ts](../src/dbStore.ts)
+- Auto-seeded demo data in [src/dbStore.ts](../src/dbStore.ts)
 
-- The current runtime uses SQLite, not the old JSON-file store.
-- The SQL schema is production-ready for PostgreSQL/Supabase migration.
-- Demo data is seeded automatically on first run.
+What is not yet implemented:
+
+- A SQL repository layer in the runtime server
+- Supabase/Postgres bindings wired into every endpoint
+- Authentication hardening, password hashing, and session tables
+
+If you want, the next step is to replace the JSON store with a real Postgres adapter and wire `server.ts` to this schema.

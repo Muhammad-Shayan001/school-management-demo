@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { School, Database, Lock, User, ArrowRight, ShieldCheck, Sparkles, ChevronRight } from 'lucide-react';
 
 interface LoginPageProps {
-  onLogin: (email: string, pass: string) => Promise<string | null>;
-  onNavigateSignup: () => void;
+  onLogin: (email: string, pass: string) => boolean | Promise<boolean>;
 }
 
-export default function LoginPage({ onLogin, onNavigateSignup }: LoginPageProps) {
+export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,9 +21,9 @@ export default function LoginPage({ onLogin, onNavigateSignup }: LoginPageProps)
     setLoading(true);
     setError('');
     try {
-      const errorMsg = await onLogin(email, password);
-      if (errorMsg) {
-        setError(errorMsg);
+      const success = await Promise.resolve(onLogin(email, password));
+      if (!success) {
+        setError('Invalid credentials. Please try again.');
       }
     } catch {
       setError('Login failed. Please try again.');
@@ -164,11 +163,8 @@ export default function LoginPage({ onLogin, onNavigateSignup }: LoginPageProps)
               </div>
             </form>
 
-            <p className="mt-4 text-center text-sm text-slate-600 lg:text-left">
-              Don't have an account?{' '}
-              <button onClick={onNavigateSignup} className="font-semibold text-[#182D66] hover:underline">
-                Sign Up
-              </button>
+            <p className="mt-4 text-center text-xs text-slate-500 lg:text-left">
+              Secure local session with browser persistence.
             </p>
           </div>
         </div>

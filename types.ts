@@ -55,6 +55,13 @@ export interface ClassSubject {
   subject_id: string;
 }
 
+export interface ClassFeeOverride {
+  id: string;
+  school_id: string;
+  class_id: string;
+  monthly_fee: number;
+}
+
 export interface Exam {
   id: string;
   school_id: string;
@@ -70,7 +77,7 @@ export interface ExamAssignment {
   subject_id: string;
 }
 
-export type StudentStatus = 'active' | 'inactive' | 'left' | 'pending';
+export type StudentStatus = 'active' | 'inactive' | 'left';
 export type BillingMode = 'individual' | 'family';
 
 export interface Student {
@@ -96,8 +103,6 @@ export interface Student {
   family_id: string; // references Family.id (can be empty string if individual)
   manual_monthly_fee: number; // 0 if uses default class fee
   status: StudentStatus;
-  image_url?: string;
-  id_card_no?: string;
 }
 
 export interface Family {
@@ -126,8 +131,7 @@ export interface Staff {
   salary: number;
   qualification: string;
   address: string;
-  status: 'active' | 'inactive' | 'pending';
-  id_card_no?: string;
+  status: 'active' | 'inactive';
 }
 
 export interface StaffAssignment {
@@ -253,28 +257,6 @@ export interface ExamResult {
   marks_total: number;
 }
 
-export interface Assignment {
-  id: string;
-  school_id: string;
-  class_id: string;
-  subject_id: string;
-  teacher_id: string;
-  title: string;
-  description: string;
-  due_date: string;
-  created_at: string;
-}
-
-export interface AssignmentSubmission {
-  id: string;
-  assignment_id: string;
-  student_id: string;
-  content: string;
-  submitted_at: string;
-  grade?: string;
-  feedback?: string;
-}
-
 // Complete schema state stored in database file
 export interface DatabaseSchema {
   schools: School[];
@@ -284,6 +266,7 @@ export interface DatabaseSchema {
   sections: Section[];
   subjects: Subject[];
   class_subjects: ClassSubject[];
+  class_fee_overrides: ClassFeeOverride[];
   exams: Exam[];
   exam_assignments: ExamAssignment[];
   students: Student[];
@@ -302,7 +285,4 @@ export interface DatabaseSchema {
   stationery_items: StationeryItem[];
   inventory_items: InventoryItem[];
   exam_results: ExamResult[];
-  assignments: Assignment[];
-  assignment_submissions: AssignmentSubmission[];
-  class_fee_overrides: any[];
 }

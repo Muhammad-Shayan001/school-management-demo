@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { jsPDF } from 'jspdf';
+import { addToast } from './Toast';
 import {
   Award,
   Search,
@@ -118,6 +119,19 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
     const score = marksMap[studentId];
     if (!score) return;
 
+    if (score.total <= 0) {
+      addToast('warning', 'Total marks must be a positive number.');
+      return;
+    }
+    if (score.obtained < 0) {
+      addToast('warning', 'Marks obtained cannot be negative.');
+      return;
+    }
+    if (score.obtained > score.total) {
+      addToast('warning', `Marks obtained (${score.obtained}) cannot exceed total marks (${score.total}).`);
+      return;
+    }
+
     try {
       const res = await fetch('/api/exam-results', {
         method: 'POST',
@@ -131,12 +145,16 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
         })
       });
 
+      const data = await res.json();
       if (res.ok) {
-        alert('Subject score row saved successfully!');
+        addToast('success', 'Subject score row saved successfully!');
         onRefresh();
+      } else {
+        addToast('error', data.error || 'Failed to save marks.');
       }
     } catch (err) {
       console.error(err);
+      addToast('error', 'Failed to save marks.');
     }
   };
 
@@ -257,7 +275,7 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
       
       reportStudentResults.forEach((r) => {
         const pct = r.marks_total > 0 ? (r.marks_obtained / r.marks_total) * 100 : 0;
-        const grade = pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B' : 'Pass';
+        const grade = pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B' : pct >= 40 ? 'C' : 'Fail';
         
         doc.setFont('Helvetica', 'bold');
         doc.setTextColor(15, 23, 42); // slate-900
@@ -497,6 +515,8 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
                         <td className="p-3">
                           <input
                             type="number"
+                            min={0}
+                            max={studentScore.total}
                             value={studentScore.obtained}
                             onChange={e =>
                               setMarksMap({
@@ -510,6 +530,7 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
                         <td className="p-3">
                           <input
                             type="number"
+                            min={1}
                             value={studentScore.total}
                             onChange={e =>
                               setMarksMap({
@@ -668,14 +689,14 @@ export default function ExamsView({ db, schoolBranding, onRefresh }: ExamsViewPr
                       <tbody className="divide-y divide-gray-100 font-medium text-gray-600">
                         {reportStudentResults.map(r => {
                           const pct = r.marks_total > 0 ? (r.marks_obtained / r.marks_total) * 100 : 0;
-                          const grade = pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B' : 'Pass';
+                          const grade = pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B' : pct >= 40 ? 'C' : 'Fail';
 
                           return (
                             <tr key={r.id}>
                               <td className="p-2 font-bold text-slate-800">{getSubjectName(r.subject_id)}</td>
                               <td className="p-2 text-center font-mono">{r.marks_obtained}</td>
                               <td className="p-2 text-center font-mono">{r.marks_total}</td>
-                              <td className="p-2 text-right font-bold text-slate-700">{grade}</td>
+                              <td className={`p-2 text-right font-bold ${grade === 'Fail' ? 'text-red-600' : 'text-slate-700'}`}>{grade}</td>
                             </tr>
                           );
                         })}
